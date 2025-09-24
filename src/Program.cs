@@ -188,7 +188,7 @@ internal class Program
                 settings.aux2PrefPortName = CConv.O2S_D(args[2], settings.aux2PrefPortName);
                 if (settings.aux2PrefPortName.ToUpper() == "AUTO")
                     settings.aux2PrefPortName = string.Empty;
-                settings.aux1PortBaudrate = CConv.O2Baudrate_D(args[3], settings.aux2PortBaudrate);
+                settings.aux2PortBaudrate = CConv.O2Baudrate_D(args[3], settings.aux2PortBaudrate);
             }
 
             return true;

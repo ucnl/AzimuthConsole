@@ -9,6 +9,7 @@
     <PlatformTarget>AnyCPU</PlatformTarget>
     <Copyright>Underwater communication &amp; navigation laboratory, LLC</Copyright>
     <Company>Underwater communication &amp; navigation laboratory, LLC</Company>
+    <Version>1.0.1</Version>
   </PropertyGroup>
 
   <ItemGroup>
