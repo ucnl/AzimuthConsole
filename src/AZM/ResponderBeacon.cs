@@ -111,7 +111,7 @@ namespace AzimuthConsole.AZM
         {
             StringBuilder sb = new StringBuilder();
 
-            sb.AppendFormat("@AZMREM,{0},", Address);
+            sb.AppendFormat("@AZMREM,{0},", (int)Address);
 
             foreach (IAging a in avalues)
             {

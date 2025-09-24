@@ -294,6 +294,7 @@ namespace AzimuthConsole.AZM
                             e.MaxDist_m)));
 
                     polling_started_received = true;
+                    prevRemAckTS = DateTime.Now;
                 }
             };
 
