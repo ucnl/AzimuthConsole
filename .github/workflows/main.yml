@@ -40,6 +40,32 @@ jobs:
             /d:sonar.host.url="$env:SONAR_HOST_URL" `
             /d:sonar.token="$env:SONAR_TOKEN"
 
+      - name: Copy UCNL libs into project workspace
+        shell: powershell
+        run: |
+          # RUNNER_WORKSPACE = C:\actions-runner\_work\AzimuthConsole
+          $projectWS = $env:RUNNER_WORKSPACE
+          $rootWS    = Split-Path $projectWS -Parent   # C:\actions-runner\_work
+      
+          $src = Join-Path $rootWS 'UCNLLibs'
+          $dst = Join-Path $projectWS 'UCNLLibs'
+      
+          Write-Host "Source:      $src"
+          Write-Host "Destination: $dst"
+      
+          if (-not (Test-Path $src)) {
+            Write-Error "UCNLLibs folder not found at $src"
+            exit 1
+          }
+      
+          New-Item -ItemType Directory -Path $dst -Force | Out-Null
+          Copy-Item -Path "$src\*" -Destination $dst -Recurse -Force
+      
+          Write-Host "Copied UCNL libs:"
+          Get-ChildItem $dst
+
+
+
       - name: Build AzimuthConsole
         shell: powershell
         working-directory: src
