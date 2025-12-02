@@ -43,7 +43,7 @@ jobs:
       - name: Build AzimuthConsole
         shell: powershell
         working-directory: src
-        run: dotnet build src/AzimuthConsole.csproj -c Release      
+        run: dotnet build AzimuthConsole.csproj -c Release      
 
       - name: SonarQube end
         run: dotnet sonarscanner end /d:sonar.token="$env:SONAR_TOKEN"
