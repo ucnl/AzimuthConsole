@@ -41,11 +41,13 @@ jobs:
             /d:sonar.token="$env:SONAR_TOKEN"
 
       - name: Build AzimuthConsole
+        shell: pwsh
+        working-directory: src
         run: |
-          "C:\Program Files (x86)\Microsoft Visual Studio\2019\BuildTools\MSBuild\Current\Bin\MSBuild.exe" `
-            src/AzimuthConsole.csproj `
-            /t:Rebuild `
-            /p:Configuration=Release `
-          
+          & "C:\Program Files (x86)\Microsoft Visual Studio\2019\BuildTools\MSBuild\Current\Bin\MSBuild.exe" `
+          "AzimuthConsole.csproj" `
+          /p:Configuration=Release `
+          /t:Rebuild         
+
       - name: SonarQube end
         run: dotnet sonarscanner end /d:sonar.token="$env:SONAR_TOKEN"
