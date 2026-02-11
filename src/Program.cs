@@ -16,7 +16,7 @@ internal class Program
         Invalid
     }
 
-    private static void Main(string[] args)
+    private static async Task Main(string[] args)
     {
         bool application_terminate = false;
 
@@ -29,7 +29,7 @@ internal class Program
         UDPTranslator? rctrl_udp_translator = null;
         AZMCombiner? azmCombiner = null;
         ConsoleInputProcessor inputProcessor = new();
-        CmdRegistrar registrar = new CmdRegistrar(azmCombiner, settings);        
+        CmdRegistrar registrar = new CmdRegistrar();        
 
         var logFileName = StrUtils.GetTimeDirTreeFileName(DateTime.Now, AppContext.BaseDirectory, "log", "log", true);
 
@@ -41,7 +41,9 @@ internal class Program
         };
         logger.WriteStart();
         logger.Write($"{Assembly.GetExecutingAssembly().GetName().Name} v{Assembly.GetExecutingAssembly().GetName().Version} (C) UC&NL, unavlab.com");
-                
+
+        AppDomain.CurrentDomain.UnhandledException += (s, e) => logger.Write($"FATAL: {e.ExceptionObject}");
+
         CmdProcessor cmdLineArgProcessor = new();
         cmdLineArgProcessor.OutputMessageHandler += (line) => logger.Write(line);
         CmdProcessor terminalCmdProcessor = new();
@@ -148,10 +150,8 @@ internal class Program
         },
         "Playback a log file. PLAY,[reserved],[logFile].");
 
-        registrar.RegisterCommandLineCommands(cmdLineArgProcessor);
-        registrar.RegisterTerminalCommands(terminalCmdProcessor);
-        registrar.RegisterRCTRLCommands(rctrlCmdProcessor);
-
+        registrar.RegisterCommandLineCommands(settings, cmdLineArgProcessor, azmCombiner);
+        
         foreach (var arg in args)
         {
             cmdLineArgProcessor.Process(arg);
@@ -258,7 +258,10 @@ internal class Program
         azmCombiner.CREQResultHandler += (o, e) => azmCombiner.OutputHandler(azmCombiner,
             new StringEventArgs($"CREQR,{e.RemoteAddress},{e.ReqCode},{e.ResCode}"));
         azmCombiner.RSTSReceivedHandler += (o, e) => azmCombiner.OutputHandler(azmCombiner,
-            new StringEventArgs($"RRA,{e.Addr}"));       
+            new StringEventArgs($"RRA,{e.Addr}"));
+
+        registrar.RegisterTerminalCommands(settings, terminalCmdProcessor, azmCombiner);
+        registrar.RegisterRCTRLCommands(settings, rctrlCmdProcessor, azmCombiner);
 
         if (settings.aux1Enabled)
         {
@@ -306,8 +309,8 @@ internal class Program
         logger.Write("Ready");
 
         while (!application_terminate)
-        {           
-            var cmd = inputProcessor.ReadCommand();
+        {
+            var cmd = await inputProcessor.ReadCommandAsync();
             if (cmd != null)
                 terminalCmdProcessor.Process(cmd);
         }

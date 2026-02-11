@@ -6,65 +6,57 @@ namespace AzimuthConsole
 {
     public class CmdRegistrar
     {
-        private readonly AZMCombiner _combiner;
-        private readonly SettingsContainer _settings;
-
-        public CmdRegistrar(AZMCombiner combiner, SettingsContainer settings)
+      
+        public void RegisterTerminalCommands(SettingsContainer settings, CmdProcessor proc, AZMCombiner combiner)
         {
-            _combiner = combiner;
-            _settings = settings;
-        }
-
-        public void RegisterTerminalCommands(CmdProcessor proc)
-        {
-            RegisterConnectCommand(proc, _combiner);
-            RegisterDisconnectCommand(proc, _combiner);
-            RegisterGetConnectionStateCommand(proc, _combiner);
-            RegisterGetInterrogationStateCommand(proc, _combiner);
-            RegisterGetDetectedStateCommand(proc, _combiner);
-            RegisterCREQCommand(proc, _combiner);
-            RegisterGetLocationAndHeadingOverrideCommand(proc, _combiner);
-            RegisterGetOutputFormatCommand(proc, _combiner);
-            RegisterSet3RespondersCoordinatesCommand(_settings, proc, _combiner);
-            RegisterSetResponderIndividualUDPOutput(_settings, proc, _combiner);
-            RegisterResponderRemoteAddressQueryCommand(proc, _combiner);
-            RegisterSetResponderRemoteAddressQueryCommand(proc, _combiner);
+            RegisterConnectCommand(proc, combiner);
+            RegisterDisconnectCommand(proc, combiner);
+            RegisterGetConnectionStateCommand(proc, combiner);
+            RegisterGetInterrogationStateCommand(proc, combiner);
+            RegisterGetDetectedStateCommand(proc, combiner);
+            RegisterCREQCommand(proc, combiner);
+            RegisterGetLocationAndHeadingOverrideCommand(proc, combiner);
+            RegisterGetOutputFormatCommand(proc, combiner);
+            RegisterSet3RespondersCoordinatesCommand(settings, proc, combiner);
+            RegisterSetResponderIndividualUDPOutput(settings, proc, combiner);
+            RegisterResponderRemoteAddressQueryCommand(proc, combiner);
+            RegisterSetResponderRemoteAddressQueryCommand(proc, combiner);
             
-            RegisterPauseInterrogationCommand(proc, _combiner);
-            RegisterResumeInterrogationCommand(proc, _combiner);
-            RegisterLocationAndHeadingOverrideCommand(proc, _combiner);
+            RegisterPauseInterrogationCommand(proc, combiner);
+            RegisterResumeInterrogationCommand(proc, combiner);
+            RegisterLocationAndHeadingOverrideCommand(proc, combiner);
         }
 
-        public void RegisterCommandLineCommands(CmdProcessor proc) 
+        public void RegisterCommandLineCommands(SettingsContainer settings, CmdProcessor proc, AZMCombiner combiner) 
         {
-            RegisterSettingsMainCommand(_settings, proc);
-            RegisterSettingsAuxilary(_settings, proc);
-            RegisterSettingsOutput(_settings, proc);
-            RegisterSetAntennaRelativePosition(_settings, proc);
-            RegisterSet3RespondersCoordinatesCommand(_settings, proc, _combiner);
-            RegisterSetResponderIndividualUDPOutput(_settings, proc, _combiner);
+            RegisterSettingsMainCommand(settings, proc);
+            RegisterSettingsAuxilary(settings, proc);
+            RegisterSettingsOutput(settings, proc);
+            RegisterSetAntennaRelativePosition(settings, proc);
+            RegisterSet3RespondersCoordinatesCommand(settings, proc, combiner);
+            RegisterSetResponderIndividualUDPOutput(settings, proc, combiner);
         }
 
-        public void RegisterRCTRLCommands(CmdProcessor proc)
+        public void RegisterRCTRLCommands(SettingsContainer settings, CmdProcessor proc, AZMCombiner combiner)
         {
-            RegisterConnectCommand(proc, _combiner);
-            RegisterDisconnectCommand(proc, _combiner);
-            RegisterGetConnectionStateCommand(proc, _combiner);
-            RegisterGetInterrogationStateCommand(proc, _combiner);
-            RegisterGetDetectedStateCommand(proc, _combiner);
-            RegisterCREQCommand(proc, _combiner);
-            RegisterGetLocationAndHeadingOverrideCommand(proc, _combiner);
-            RegisterGetOutputFormatCommand(proc, _combiner);
+            RegisterConnectCommand(proc, combiner);
+            RegisterDisconnectCommand(proc, combiner);
+            RegisterGetConnectionStateCommand(proc, combiner);
+            RegisterGetInterrogationStateCommand(proc, combiner);
+            RegisterGetDetectedStateCommand(proc, combiner);
+            RegisterCREQCommand(proc, combiner);
+            RegisterGetLocationAndHeadingOverrideCommand(proc, combiner);
+            RegisterGetOutputFormatCommand(proc, combiner);
             
-            RegisterSetResponderIndividualUDPOutput(_settings, proc, _combiner);
-            RegisterResponderRemoteAddressQueryCommand(proc, _combiner);
-            RegisterSetResponderRemoteAddressQueryCommand(proc, _combiner);
+            RegisterSetResponderIndividualUDPOutput(settings, proc, combiner);
+            RegisterResponderRemoteAddressQueryCommand(proc, combiner);
+            RegisterSetResponderRemoteAddressQueryCommand(proc, combiner);
 
-            RegisterPauseInterrogationCommand(proc, _combiner);
-            RegisterResumeInterrogationCommand(proc, _combiner);
-            RegisterLocationAndHeadingOverrideCommand(proc, _combiner);
+            RegisterPauseInterrogationCommand(proc, combiner);
+            RegisterResumeInterrogationCommand(proc, combiner);
+            RegisterLocationAndHeadingOverrideCommand(proc, combiner);
 
-            RegisterSet3RespondersCoordinatesCommand(_settings, proc, _combiner);
+            RegisterSet3RespondersCoordinatesCommand(settings, proc, combiner);
         }
 
 

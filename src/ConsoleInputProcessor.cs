@@ -1,24 +1,14 @@
 ﻿using System.Text;
 
-public class ConsoleInputProcessor : IDisposable
+public class ConsoleInputProcessor : IAsyncDisposable, IDisposable
 {
     private readonly StringBuilder _inputBuffer = new();
-    private CancellationTokenSource _cts = new();
+    private readonly CancellationTokenSource _cts = new();
     private bool _disposed;
     private string cmdToEmulate = string.Empty;
 
-    // Храним действие И описание для каждой горячей клавиши
     private readonly Dictionary<ConsoleKeyInfo, (Action action, string description)> _hotkeys = new();
 
-
-    public ConsoleInputProcessor()
-    {
-        // Можно зарегистрировать стандартные клавиши с описаниями
-    }
-
-    /// <summary>
-    /// Регистрирует горячую клавишу с действием и описанием
-    /// </summary>
     public void RegisterHotkey(ConsoleKeyInfo keyInfo, Action action, string description)
     {
         var _ki = new ConsoleKeyInfo('\0', keyInfo.Key,
@@ -31,23 +21,22 @@ public class ConsoleInputProcessor : IDisposable
 
     private static ConsoleKeyInfo DiscardKeyChar(ConsoleKeyInfo keyInfo)
     {
-        return new ConsoleKeyInfo('\0', keyInfo.Key, 
+        return new ConsoleKeyInfo('\0', keyInfo.Key,
             keyInfo.Modifiers.HasFlag(ConsoleModifiers.Shift),
             keyInfo.Modifiers.HasFlag(ConsoleModifiers.Alt),
             keyInfo.Modifiers.HasFlag(ConsoleModifiers.Control));
     }
 
-    public void EmulateCommand(string line)
+    public void EmulateCommand(string? line)
     {
-        cmdToEmulate = line;
+        cmdToEmulate = line ?? string.Empty;
     }
 
-    /// <summary>
-    /// Считывает команду с консоли (неблокирующий режим)
-    /// </summary>
-    public string ReadCommand()
+    public async Task<string?> ReadCommandAsync(CancellationToken cancellationToken = default)
     {
-        while (!_cts.IsCancellationRequested)
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token, cancellationToken);
+
+        while (!linkedCts.IsCancellationRequested)
         {
             if (!string.IsNullOrEmpty(cmdToEmulate))
             {
@@ -61,9 +50,9 @@ public class ConsoleInputProcessor : IDisposable
                 var keyInfo = Console.ReadKey(true);
                 var _ki = DiscardKeyChar(keyInfo);
 
-                if (_hotkeys.ContainsKey(_ki))
+                if (_hotkeys.TryGetValue(_ki, out var hotkey))
                 {
-                    _hotkeys[_ki].action.Invoke();
+                    hotkey.action.Invoke();
                     continue;
                 }
 
@@ -90,15 +79,12 @@ public class ConsoleInputProcessor : IDisposable
                 }
             }
 
-            Thread.Sleep(10);
+            await Task.Delay(10, linkedCts.Token).ConfigureAwait(false);
         }
 
         return null;
     }
 
-    /// <summary>
-    /// Возвращает форматированную строку со списком всех горячих клавиш и их описаний
-    /// </summary>
     public string GetHotkeysDescription()
     {
         if (_hotkeys.Count == 0)
@@ -116,16 +102,12 @@ public class ConsoleInputProcessor : IDisposable
                 : keyInfo.Key.ToString();
             string description = kvp.Value.description;
 
-
             sb.AppendLine($"  {modifiers}{keyName} — {description}");
         }
 
         return sb.ToString();
     }
 
-    /// <summary>
-    /// Формирует строку с модификаторами (Ctrl+, Alt+, Shift+)
-    /// </summary>
     private static string GetModifiersString(ConsoleKeyInfo keyInfo)
     {
         var parts = new List<string>();
@@ -137,13 +119,14 @@ public class ConsoleInputProcessor : IDisposable
         if (keyInfo.Modifiers.HasFlag(ConsoleModifiers.Control))
             parts.Add("Ctrl+");
 
-
         return string.Join("", parts);
     }
 
-    /// <summary>
-    /// Освобождает ресурсы
-    /// </summary>
+    public void Cancel()
+    {
+        _cts.Cancel();
+    }
+
     public void Dispose()
     {
         if (_disposed) return;
@@ -152,5 +135,17 @@ public class ConsoleInputProcessor : IDisposable
         _cts.Dispose();
 
         _disposed = true;
+        GC.SuppressFinalize(this);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_disposed) return;
+
+        await _cts.CancelAsync();
+        _cts.Dispose();
+
+        _disposed = true;
+        GC.SuppressFinalize(this);
     }
 }
