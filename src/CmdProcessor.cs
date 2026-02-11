@@ -24,26 +24,26 @@ namespace AzimuthConsole
 
         public CmdProcessor()
         {
-            commands = new Dictionary<string, Command>();
+            commands = [];
         }
 
-        private static Dictionary<string, Func<string, object>> parsers = new Dictionary<string, Func<string, object>>()
+        private static Dictionary<string, Func<string, object>> parsers = new()
         {
             { "x", x => int.Parse(x) },
             { "x.x", x => double.Parse(x, CultureInfo.InvariantCulture) },
             { "c--c", x => x },
         };
 
-        private static Dictionary<string, Func<object, string>> formatters = new Dictionary<string, Func<object, string>>()
+        private static Dictionary<string, Func<object, string>> formatters = new()
         {
             { "x", x => ((int)(x)).ToString() },
-            { "x.x", x => ((double)x).ToString("F06", CultureInfo.InvariantCulture).TrimEnd(new char[] {'0'}) },
+            { "x.x", x => ((double)x).ToString("F06", CultureInfo.InvariantCulture).TrimEnd(['0']) },
             { "c--c", x => x.ToString() },
         };
 
         public string GetCommandsDescriptions()
         {
-            StringBuilder sb = new StringBuilder();
+            StringBuilder sb = new();
 
             foreach (var item in commands.Values)
             {
@@ -98,23 +98,26 @@ namespace AzimuthConsole
 
         public void Process(string line)
         {
+            if (line.StartsWith('#')) return;
+
             var splits = line.Split(',');
             if (splits.Length > 0)
             {
-                var cmdID = splits[0].ToUpper();
+                var cmdID = splits[0].ToUpper();                
+
                 if (IsCommandPresent(cmdID))
                 {
                     if (string.IsNullOrEmpty(commands[cmdID].ParametersDescriptor))
                     {
                         commands[cmdID].CommandHandler(null);
-                        OutputMessageHandler?.Invoke(string.Format("\"{0}\" OK", line));
+                        OutputMessageHandler?.Invoke($"\"{line}\" OK");
                     }
                     else
                     {
                         var descriptors = commands[cmdID].ParametersDescriptor.Split(',');
                         if (descriptors.Length == splits.Length - 1)
                         {
-                            List<object> args = new List<object>();
+                            List<object> args = [];
 
                             bool isOK = true;
                             int wrongParamIdx = -1;
@@ -130,7 +133,7 @@ namespace AzimuthConsole
                                         else
                                             args.Add(parsers[descriptors[i]](splits[i + 1]));
                                     }
-                                    catch (Exception ex)
+                                    catch (Exception)
                                     {
                                         isOK = false;
                                         wrongParamIdx = i;
@@ -145,23 +148,23 @@ namespace AzimuthConsole
 
                             if (isOK)
                             {
-                                var cmd_result = commands[cmdID].CommandHandler(args.ToArray());
-                                OutputMessageHandler?.Invoke(string.Format("\"{0}\" {1}", line, cmd_result ? "OK" : "Failed"));
+                                var cmd_result = commands[cmdID].CommandHandler([.. args]);
+                                OutputMessageHandler?.Invoke($"\"{line}\" {(cmd_result ? "OK" : "Failed")}");
                             }
                             else
                             {
-                                OutputMessageHandler?.Invoke(string.Format("'{0}' Syntax error: parameter {1} wrong format. Type \'Help\' for supported commands list", cmdID, wrongParamIdx));
+                                OutputMessageHandler?.Invoke($"'{cmdID}' Syntax error: parameter {wrongParamIdx} wrong format. Type \'Help\' for supported commands list");
                             }
                         }
                         else
                         {
-                            OutputMessageHandler?.Invoke(string.Format("'{0}' Syntax error: wrong paramters number. Type \'Help\' for supported commands list", cmdID));
+                            OutputMessageHandler?.Invoke($"'{cmdID}' Syntax error: wrong paramters number. Type \'Help\' for supported commands list");
                         }
                     }
                 }
                 else
                 {
-                    OutputMessageHandler?.Invoke(string.Format("\'{0}\' - Unknown command. Type \'Help\' for supported commands list", cmdID));
+                    OutputMessageHandler?.Invoke($"\'{cmdID}\' - Unknown command. Type \'Help\' for supported commands list");
                 }
             }
         }

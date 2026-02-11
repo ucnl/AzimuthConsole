@@ -9,7 +9,12 @@
     <PlatformTarget>AnyCPU</PlatformTarget>
     <Copyright>Underwater communication &amp; navigation laboratory, LLC</Copyright>
     <Company>Underwater communication &amp; navigation laboratory, LLC</Company>
-    <Version>1.0.1</Version>
+    <Version>1.0.2</Version>
+    <Description>Zima2 underwater acoustic positioning system host application</Description>
+	<EnablePackageValidation>false</EnablePackageValidation>
+	<CheckForVulnerablePackages>false</CheckForVulnerablePackages>
+	<AssemblyVersion>1.0.3.0</AssemblyVersion>
+	<FileVersion>1.0.3.0</FileVersion>
   </PropertyGroup>
 
   <ItemGroup>
@@ -20,6 +25,9 @@
     <Reference Include="UCNLDrivers">
       <HintPath>..\UCNLDrivers\bin\Release\net8.0\UCNLDrivers.dll</HintPath>
     </Reference>
+    <Reference Include="UCNLMan">
+      <HintPath>..\UCNLMan\bin\Release\net8.0\UCNLMan.dll</HintPath>
+    </Reference>
     <Reference Include="UCNLNav">
       <HintPath>..\UCNLNav\bin\Release\net8.0\UCNLNav.dll</HintPath>
     </Reference>
@@ -28,6 +36,9 @@
     </Reference>
     <Reference Include="UCNLPhysics">
       <HintPath>..\UCNLPhysics\bin\Release\net8.0\UCNLPhysics.dll</HintPath>
+    </Reference>
+    <Reference Include="UCNLSalinity">
+      <HintPath>..\UCNLSalinity\bin\Release\net8.0\UCNLSalinity.dll</HintPath>
     </Reference>
   </ItemGroup>
 
