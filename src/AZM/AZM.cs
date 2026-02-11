@@ -135,8 +135,9 @@ namespace AzimuthConsole.AZM
 
     public enum AZM_DEVICE_TYPE_Enum
     {
-        DT_BASE = 0,
+        DT_USBL_TSV = 0,
         DT_REMOTE = 1,
+        DT_LBL_TSV = 2,
         DT_INVALID
     }
 
@@ -168,7 +169,7 @@ namespace AzimuthConsole.AZM
 
 
 
-        static readonly Dictionary<string, ICs> ICsIdxArray = new Dictionary<string, ICs>()
+        static readonly Dictionary<string, ICs> ICsIdxArray = new()
         {
             { "0", ICs.IC_D2H_ACK },
             { "1", ICs.IC_D2D_STRSTP },
@@ -201,6 +202,7 @@ namespace AzimuthConsole.AZM
 
 
         public static readonly Func<double, string> meters1dec_fmtr = o => string.Format(CultureInfo.InvariantCulture, "{0:F01}", o);
+        public static readonly Func<double, string> meters3dec_fmtr = o => string.Format(CultureInfo.InvariantCulture, "{0:F03}", o);
         public static readonly Func<double, string> degrees1dec_fmtr = o => string.Format(CultureInfo.InvariantCulture, "{0:F01}", o);
         public static readonly Func<double, string> latlon_fmtr = o => string.Format(CultureInfo.InvariantCulture, "{0:F06}", o);
         public static readonly Func<double, string> db_fmtr = o => string.Format(CultureInfo.InvariantCulture, "{0:F01}", o);
@@ -220,7 +222,7 @@ namespace AzimuthConsole.AZM
 
         public static IEnumerable<REMOTE_ADDR_Enum> GetAddrsByMask(ushort mask)
         {
-            List<REMOTE_ADDR_Enum> result = new List<REMOTE_ADDR_Enum>();
+            List<REMOTE_ADDR_Enum> result = [];
 
             for (ushort i = 0; i < mask; i++)
             {

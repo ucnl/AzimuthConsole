@@ -221,7 +221,7 @@ namespace AzimuthConsole.AZM
             }
         }
 
-        ICs lastQueryID = ICs.IC_INVALID;
+        ICs? lastQueryID = ICs.IC_INVALID;
 
 
         public bool IsDeviceInfoValid { get; private set; }
@@ -245,6 +245,11 @@ namespace AzimuthConsole.AZM
             base.IsLogIncoming = true;
             base.IsTryAlways = true;
 
+            SerialNumber = string.Empty;
+            SystemInfo = string.Empty;
+            SystemVersion = string.Empty;
+
+
             NMEAInit();
         }
 
@@ -254,7 +259,7 @@ namespace AzimuthConsole.AZM
 
         #region Private
 
-        private void NMEAInit()
+        private static void NMEAInit()
         {
             if (!nmeaSingleton)
             {
@@ -465,7 +470,7 @@ namespace AzimuthConsole.AZM
                 AddressMask = 0;
                 RemoteAddress = REMOTE_ADDR_Enum.REM_ADDR_INVALID;
 
-                if (DeviceType == AZM_DEVICE_TYPE_Enum.DT_BASE)
+                if (DeviceType == AZM_DEVICE_TYPE_Enum.DT_USBL_TSV)
                     AddressMask = AZM.O2U16(parameters[1]);
                 else if (DeviceType == AZM_DEVICE_TYPE_Enum.DT_REMOTE)
                     RemoteAddress = AZM.O2_REMOTE_ADDR_Enum(parameters[1]);
@@ -519,7 +524,7 @@ namespace AzimuthConsole.AZM
         {
             StopTimer();
             // $PAZM?,[reserved]
-            var msg = NMEAParser.BuildProprietarySentence(ManufacturerCodes.AZM, "?", new object[] { 0 });
+            var msg = NMEAParser.BuildProprietarySentence(ManufacturerCodes.AZM, "?", [0]);
             return TrySend(msg, ICs.IC_H2D_DINFO_GET);
         }
 
@@ -544,11 +549,11 @@ namespace AzimuthConsole.AZM
             // $PAZM1,[addrMask],[sty_PSU],[soundSpeed_mps],[maxDist_m]
 
             var msg = NMEAParser.BuildProprietarySentence(ManufacturerCodes.AZM, "1",
-                new object[] {
-                    addrMask > 0 ? (object)(int)addrMask : null,
-                    !double.IsNaN(sty_PSU) ? (object)sty_PSU : null,
-                    !double.IsNaN(soundSpeed_mps) ? (object)soundSpeed_mps : null,
-                    !double.IsNaN(maxDist_m) ? (object)maxDist_m : null });
+                [
+                    addrMask > 0 ? (int)addrMask : null,
+                    !double.IsNaN(sty_PSU) ? sty_PSU : null,
+                    !double.IsNaN(soundSpeed_mps) ? soundSpeed_mps : null,
+                    !double.IsNaN(maxDist_m) ? maxDist_m : null ]);
 
             return TrySend(msg, ICs.IC_D2D_STRSTP);
         }
@@ -568,9 +573,9 @@ namespace AzimuthConsole.AZM
             // $PAZM2,[addr],[sty_PSU]
 
             var msg = NMEAParser.BuildProprietarySentence(ManufacturerCodes.AZM, "2",
-                new object[] {
-                    addr == REMOTE_ADDR_Enum.REM_ADDR_INVALID ? null : (object)(int)addr,
-                    !double.IsNaN(sty_PSU) ? (object)sty_PSU : null });
+                [
+                    addr == REMOTE_ADDR_Enum.REM_ADDR_INVALID ? null : (int)addr,
+                    !double.IsNaN(sty_PSU) ? sty_PSU : null ]);
 
             return TrySend(msg, ICs.IC_D2D_RSTS);
         }
@@ -579,11 +584,10 @@ namespace AzimuthConsole.AZM
         public bool Query_CREQ(REMOTE_ADDR_Enum addr, CDS_REQ_CODES_Enum rcode)
         {
             var msg = NMEAParser.BuildProprietarySentence(ManufacturerCodes.AZM, "7",
-                new object[]
-                {
-                    addr == REMOTE_ADDR_Enum.REM_ADDR_INVALID ? null : (object)(int)addr,
+                [
+                    addr == REMOTE_ADDR_Enum.REM_ADDR_INVALID ? null : (int)addr,
                     (int)rcode
-                });
+                ]);
 
             return TrySend(msg, ICs.IC_H2D_CREQ);
         }
@@ -591,12 +595,11 @@ namespace AzimuthConsole.AZM
         public bool Query_CSET_Write(CDS_REQ_CODES_Enum did, int value)
         {
             var msg = NMEAParser.BuildProprietarySentence(ManufacturerCodes.AZM, "8",
-                new object[]
-                {
+                [
                     (int)did,
                     value,
                     null
-                });
+                ]);
 
             return TrySend(msg, ICs.IC_D2D_CSET);
         }
@@ -604,12 +607,11 @@ namespace AzimuthConsole.AZM
         public bool Query_CSET_Read(CDS_REQ_CODES_Enum did)
         {
             var msg = NMEAParser.BuildProprietarySentence(ManufacturerCodes.AZM, "8",
-               new object[]
-               {
+               [
                     (int)did,
                     null,
                     null,
-               });
+               ]);
 
             return TrySend(msg, ICs.IC_D2D_CSET);
         }
@@ -622,7 +624,7 @@ namespace AzimuthConsole.AZM
 
         public override void InitQuerySend()
         {
-            var msg = NMEAParser.BuildProprietarySentence(ManufacturerCodes.AZM, "?", new object[] { 0 });
+            var msg = NMEAParser.BuildProprietarySentence(ManufacturerCodes.AZM, "?", [0]);
             Send(msg);
         }
 
@@ -637,9 +639,9 @@ namespace AzimuthConsole.AZM
         {
             if (sentence is NMEAProprietarySentence)
             {
-                NMEAProprietarySentence pSentence = (sentence as NMEAProprietarySentence);
+                NMEAProprietarySentence? pSentence = (sentence as NMEAProprietarySentence);
 
-                if (pSentence.Manufacturer == ManufacturerCodes.AZM)
+                if (pSentence?.Manufacturer == ManufacturerCodes.AZM)
                 {
                     if ((!detected) && ("0123568!".Contains(pSentence.SentenceIDString)))
                     {
@@ -672,7 +674,7 @@ namespace AzimuthConsole.AZM
         #region Events
 
         public EventHandler IsWaitingLocalChangedEventHandler;
-        public EventHandler IsWaitingRemoteChangedEventHandler;
+        public EventHandler? IsWaitingRemoteChangedEventHandler;
 
         public EventHandler<ACKReceivedEventArgs> ACKReceived;
         public EventHandler<RSTSReceivedEventArgs> RSTSReceived;
