@@ -13,6 +13,9 @@ _platforms:_
 
 - [AzimuthConsole: Руководство пользователя](https://docs.unavlab.com/documentation/RU/Zima/AzimuthConsole_manual_ru.html)
 
+- [Changelog](https://github.com/ucnl/AzimuthConsole/blob/main/src/changelog.md)
+- [Примеры командной строки](https://github.com/ucnl/AzimuthConsole/blob/main/src/Handy_scripts.md)
+
 
 ## EN
 
