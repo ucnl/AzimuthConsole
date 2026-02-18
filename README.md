@@ -4,8 +4,8 @@ _version:_
 - **1.0.3.0**
 
 _platforms:_
-- win x64
-- linux x64
+- [win x64](https://github.com/ucnl/AzimuthConsole/releases/download/1.0/AzimuthConsole_win_x64.zip)
+- [linux x64](https://github.com/ucnl/AzimuthConsole/releases/download/1.0/AzimuthConsole_linux_x64.zip)
 
 ## RU
 
