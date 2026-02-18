@@ -1,8 +1,6 @@
 ﻿
 using AzimuthConsole;
 using AzimuthConsole.AZM;
-using System.Net;
-using System.Reflection;
 using System.Text;
 using UCNLDrivers;
 
@@ -22,14 +20,14 @@ internal class Program
 
         ConsoleLogOptions consoleLogOption = ConsoleLogOptions.Enabled;
 
-        LogPlayer? lPlayer = null;
+        LogPlayerWrapper? logPlayerWrapper = null;
         TSLogProvider? logger;
         SettingsContainer? settings = new();
         UDPListener? rctrl_udp_listener = null;
         UDPTranslator? rctrl_udp_translator = null;
         AZMCombiner? azmCombiner = null;
         ConsoleInputProcessor inputProcessor = new();
-        CmdRegistrar registrar = new CmdRegistrar();        
+        CmdRegistrar registrar = new();        
 
         var logFileName = StrUtils.GetTimeDirTreeFileName(DateTime.Now, AppContext.BaseDirectory, "log", "log", true);
 
@@ -40,7 +38,8 @@ internal class Program
                 Console.Write(e.Text); 
         };
         logger.WriteStart();
-        logger.Write($"{Assembly.GetExecutingAssembly().GetName().Name} v{Assembly.GetExecutingAssembly().GetName().Version} (C) UC&NL, unavlab.com");
+
+        logger.Write($"{AppUtils.GetFullVersionInfo()} (C) UC&NL, unavlab.com");
 
         AppDomain.CurrentDomain.UnhandledException += (s, e) => logger.Write($"FATAL: {e.ExceptionObject}");
 
@@ -48,62 +47,12 @@ internal class Program
         cmdLineArgProcessor.OutputMessageHandler += (line) => logger.Write(line);
         CmdProcessor terminalCmdProcessor = new();
         terminalCmdProcessor.OutputMessageHandler += (line) => logger.Write(line);
-        CmdProcessor rctrlCmdProcessor = new();               
+        CmdProcessor rctrlCmdProcessor = new();
 
-        lPlayer = new LogPlayer();
-        lPlayer.NewLogLineHandler += (o, e) =>
-        {
-            /*
-            if (e.TS != TimeSpan.Zero)
-            {
-                var now = DateTime.Now;
-                emu_TS = new DateTime(now.Year, now.Month, now.Day, e.TS.Hours, e.TS.Minutes, e.TS.Seconds);
-                is_emu_TS = true;
-            }
-            */
-
-            if (e.Line.StartsWith("INFO"))
-            {
-                int idx = e.Line.IndexOf(' ');
-                if (idx >= 0)
-                {
-                    azmCombiner.Emulate(e.Line.Substring(idx).Trim());
-                }
-            }
-        };
-        lPlayer.LogPlaybackFinishedHandler += (o, e) => azmCombiner.Disconnect();
-        bool StartLogPlayBack(bool isInstant, string fileName)
-        {
-            if (lPlayer.IsRunning || azmCombiner.ConnectionActive ||
-                !File.Exists(fileName))
-                return false;
-            else
-            {
-                bool ok = false;
-
-                try
-                {
-                    lPlayer.Playback(fileName);
-                    ok = true;
-                }
-                catch (Exception)
-                {
-                    
-                }
-
-                return ok;
-            }  
-        }
-        bool StopLogPlayBack()
-        {
-            if (lPlayer.IsRunning)
-            {
-                lPlayer.RequestToStop();
-                return true;
-            }
-            else
-                return false;
-        }
+        logPlayerWrapper = new();
+        logPlayerWrapper.NewLineHandler = (o, e) => azmCombiner?.Emulate(e.Line);
+        logPlayerWrapper.PlaybackFinishedHandler += (o, e) => azmCombiner?.Disconnect();
+        
 
         var hCmd = cmdLineArgProcessor.AddCommand("HELP", "", args =>
         {
@@ -139,11 +88,11 @@ internal class Program
             var lFileName = AZM.O2S(args[1]);
             if (string.IsNullOrEmpty(lFileName))
             {
-                result = StopLogPlayBack();
+                result = logPlayerWrapper.StopLogPlayBack();
             }
             else
             {
-                result = StartLogPlayBack(args[0] != null, lFileName);
+                result = logPlayerWrapper.StartLogPlayBack(args[0] != null, lFileName);
             }
             
             return result;
@@ -160,6 +109,11 @@ internal class Program
         logger.Write($"\r\n- Application settings:{settings}");
 
         inputProcessor.RegisterHotkey(
+            new ConsoleKeyInfo('\0', ConsoleKey.F1, false, false, false),
+            () => { inputProcessor.EmulateCommand("help"); },
+            "Show help."
+        );
+        inputProcessor.RegisterHotkey(
             new ConsoleKeyInfo('\0', ConsoleKey.F12, false, false, false),
             () => {
 
@@ -170,7 +124,7 @@ internal class Program
             "Switch console output."
         );
         inputProcessor.RegisterHotkey(
-            new ConsoleKeyInfo('\0', ConsoleKey.L, false, false, true),
+            new ConsoleKeyInfo('\0', ConsoleKey.N, false, false, true),
             () => 
             {
                 if (azmCombiner != null)
@@ -181,7 +135,7 @@ internal class Program
                         terminalCmdProcessor.Process("ocon");
                 }
             },
-            "Link: Open/Close connections (OCON/CCON)."
+            "Network: Open/Close connections (OCON/CCON)."
         );
         inputProcessor.RegisterHotkey(
             new ConsoleKeyInfo('\0', ConsoleKey.I, false, false, true),
@@ -196,6 +150,11 @@ internal class Program
                 }
             },
             "Interrogation: Pause/Resume responders interrogation."
+        );        
+        inputProcessor.RegisterHotkey(
+            new ConsoleKeyInfo('\0', ConsoleKey.L, false, false, true),
+            () => { inputProcessor.EmulateCommand("cls"); },
+            "Clear screen."
         );
         inputProcessor.RegisterHotkey(
             new ConsoleKeyInfo('\0', ConsoleKey.E, false, false, true),
@@ -234,12 +193,8 @@ internal class Program
             };
         }
 
-        azmCombiner = new AZMCombiner(settings.address_mask,
-            settings.sty_PSU, settings.max_dist_m,
-            settings.antenna_angular_offset_deg, settings.antenna_x_offset_m, settings.antenna_y_offset_m)
-        {
-            AZMPreferredPortName = settings.azmPrefPortName
-        };
+        azmCombiner = new AZMCombiner(settings);
+        azmCombiner.AZMPreferredPortName = settings.azmPrefPortName;
         azmCombiner.OutputHandler += (o, e) => logger.WriteSilent($"<< {e.Line}");
         azmCombiner.LogEventHandler += (o, e) =>
         {
@@ -261,50 +216,7 @@ internal class Program
             new StringEventArgs($"RRA,{e.Addr}"));
 
         registrar.RegisterTerminalCommands(settings, terminalCmdProcessor, azmCombiner);
-        registrar.RegisterRCTRLCommands(settings, rctrlCmdProcessor, azmCombiner);
-
-        if (settings.aux1Enabled)
-        {
-            azmCombiner.AUX1PreferredPortName = settings.aux1PrefPortName;
-            azmCombiner.AUX1Init(settings.aux1PortBaudrate);
-        }
-
-        if (settings.aux2Enabled)
-        {
-            azmCombiner.AUX2PreferredPortName = settings.aux2PrefPortName;
-            azmCombiner.AUX2Init(settings.aux2PortBaudrate);
-        }
-
-        if (settings.outputSerialEnabled)
-        {
-            logger.Write($"Initializing SERIAL_OUT on {settings.outputSerialPortName}...");
-            azmCombiner.SerialOutputInit(settings.outputSerialPortName, settings.outputSerialPortBaudrate);
-            azmCombiner.OutputHandler += (o, e) => azmCombiner.ToSerialOutput(e.Line);
-        }
-
-        if (settings.output_udp_enabled)
-        {
-            logger.Write($"Initializing UDP output UDP_OUT on {settings.output_endpoint}...");
-            azmCombiner.UDPOutputInit(settings.output_endpoint);
-            azmCombiner.OutputHandler += (o, e) => azmCombiner.ToUDPOutput(e.Line);
-        }
-
-        if (settings.LBLResponderCoordinatesMode == LBLResponderCoordinatesModeEnum.Cartesian)
-        {
-            azmCombiner.Set3RespondersLocalCoordinates(
-                settings.LBLModeR1X, settings.LBLModeR1Y,
-                settings.LBLModeR2X, settings.LBLModeR2Y,
-                settings.LBLModeR3X, settings.LBLModeR3Y);
-        }
-
-        if ((settings.InvidvidualEndpoints != null) && (settings.InvidvidualEndpoints.Count > 0))
-        {
-            foreach (var item in settings.InvidvidualEndpoints)
-            {
-                logger.Write($"Initializing responder {item.Key} UDP output on {item.Value}...");
-                azmCombiner.SetResponderIndividualUDPChannel(item.Key, item.Value);
-            }
-        }
+        registrar.RegisterRCTRLCommands(settings, rctrlCmdProcessor, azmCombiner);        
 
         logger.Write("Ready");
 
@@ -321,8 +233,9 @@ internal class Program
             rctrl_udp_listener?.StopListen();
         }
 
-        azmCombiner.Disconnect();
-        
+        azmCombiner?.Disconnect();
+        azmCombiner?.Dispose();
+
         logger.Flush();
         logger.FinishLog();
         inputProcessor.Dispose();

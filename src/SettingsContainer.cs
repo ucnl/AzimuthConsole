@@ -23,13 +23,13 @@ namespace AzimuthConsole
 
         public bool aux1Enabled = false;
         public string aux1PrefPortName = string.Empty;
-        public BaudRate aux1PortBaudrate = BaudRate.baudRate9600;
+        public BaudRate aux1PortBaudrate  = BaudRate.baudRate9600;
 
-        public bool aux2Enabled = false;
+        public bool aux2Enabled  = false;
         public string aux2PrefPortName = string.Empty;
-        public BaudRate aux2PortBaudrate = BaudRate.baudRate9600;
+        public BaudRate aux2PortBaudrate  = BaudRate.baudRate9600;
 
-        public bool rctrl_enabled = false;
+        public bool rctrl_enabled  = false;
         public IPEndPoint rctrl_in_endpoint = new IPEndPoint(new IPAddress(new byte[] { 255, 255, 255, 255 }), 28127);
         public IPEndPoint rctrl_out_endpoint = new IPEndPoint(new IPAddress(new byte[] { 255, 255, 255, 255 }), 28129);
 
@@ -48,16 +48,28 @@ namespace AzimuthConsole
         public double antenna_y_offset_m = 0.0;
         public double antenna_angular_offset_deg = 0.0;
 
-        public LBLResponderCoordinatesModeEnum LBLResponderCoordinatesMode = LBLResponderCoordinatesModeEnum.None;
+        public double USBLMode_DHFilter_MaxSpeed_mps = 1.0;
+        public double USBLMode_DHFilter_Threshold_m = 5.0;
+        public int USBLMode_DHFilter_FIFO_Size = 8;
+        public double USBLMode_SFilter_Threshold = 20.0;
+        public int USBLMode_SFilter_FIFO_Size = 4;
 
-        public double LBLModeR1X = double.NaN;
-        public double LBLModeR1Y = double.NaN;
-        public double LBLModeR2X = double.NaN;
-        public double LBLModeR2Y = double.NaN;
-        public double LBLModeR3X = double.NaN;
-        public double LBLModeR3Y = double.NaN;
+        public LBLResponderCoordinatesModeEnum LBLResponderCoordinatesMode = LBLResponderCoordinatesModeEnum.None;        
 
-        public Dictionary<REMOTE_ADDR_Enum, IPEndPoint> InvidvidualEndpoints = new Dictionary<REMOTE_ADDR_Enum, IPEndPoint>();
+        public (double X, double Y) LBLModeR1Coordinates = (double.NaN, double.NaN);
+        public (double X, double Y) LBLModeR2Coordinates = (double.NaN, double.NaN);
+        public (double X, double Y) LBLModeR3Coordinates = (double.NaN, double.NaN);
+
+        public double LBLMode_RErr_Threshold_m = 10.0;
+        public bool LBLMode_Use_DHFilter = false;
+        public double LBLMode_DHFilter_MaxSpeed_mps = 1.0;
+        public double LBLMode_DHFilter_Threshold_m = 5.0;
+        public int LBLMode_DHFilter_FIFO_Size = 8;
+        public bool LBLMode_Use_SFilter = false;
+        public double LBLMode_SFilter_Threshold_m = 20.0;
+        public int LBLMode_SFilter_FIFO_Size = 4;
+
+        public Dictionary<REMOTE_ADDR_Enum, IPEndPoint> InvidvidualEndpoints = new();
 
         #endregion
 
@@ -95,93 +107,28 @@ namespace AzimuthConsole
             antenna_x_offset_m = 0.0;
             antenna_y_offset_m = 0.0;
             antenna_angular_offset_deg = 0.0;
-        }
 
-        private string FormatValue(object value)
-        {
-            if (value == null) return "null";
+            USBLMode_DHFilter_MaxSpeed_mps = 1.0;
+            USBLMode_DHFilter_Threshold_m = 5.0;
+            USBLMode_DHFilter_FIFO_Size = 8;
+            USBLMode_SFilter_Threshold = 20.0;
+            USBLMode_SFilter_FIFO_Size = 4;
+            
+            LBLResponderCoordinatesMode = LBLResponderCoordinatesModeEnum.None;
 
-            if (value is Array array)
-            {
-                return string.Join(", ", array.Cast<object>().Select(FormatValue));
-            }
-            else if (IsGenericDictionary(value))
-            {
-                return FormatGenericDictionary(value);
-            }
-            else if (value is IDictionary nonGenericDict)
-            {
-                if (nonGenericDict.Count == 0) return "(empty)";
-
-                var pairs = nonGenericDict.Cast<DictionaryEntry>()
-                    .Select(entry => $"[{FormatValue(entry.Key)}={FormatValue(entry.Value)}]");
-                return string.Join(", ", pairs);
-            }
-            else if (value.GetType().IsClass && !IsSystemType(value.GetType()))
-            {
-                return value.ToString() ?? "null";
-            }
-            else
-            {
-                return value.ToString() ?? "null";
-            }
-        }
-
-        private bool IsGenericDictionary(object value)
-        {
-            var type = value.GetType();
-            return type.IsGenericType &&
-                   type.GetGenericTypeDefinition() == typeof(Dictionary<,>);
-        }
-
-        private bool IsSystemType(Type type)
-        {
-            return type.Namespace?.StartsWith("System") == true;
-        }
-
-        private string FormatGenericDictionary(object dictionary)
-        {
-            try
-            {
-                var dictType = dictionary.GetType();
-                var keyValuePairs = dictType.GetProperty("Keys")?.GetValue(dictionary) as System.Collections.IEnumerable;
-                var values = dictType.GetProperty("Values")?.GetValue(dictionary) as System.Collections.IEnumerable;
-
-                if (keyValuePairs == null || values == null) return "(invalid dictionary)";
-
-                var keys = keyValuePairs.Cast<object>().ToList();
-                var vals = values.Cast<object>().ToList();
-
-                var pairs = new List<string>();
-                for (int i = 0; i < keys.Count; i++)
-                {
-                    pairs.Add($"[{FormatValue(keys[i])}={FormatValue(vals[i])}]");
-                }
-
-                return pairs.Count > 0 ? string.Join(", ", pairs) : "(empty)";
-            }
-            catch
-            {
-                return "(error formatting dictionary)";
-            }
-        }
-
-
-        public override string ToString()
-        {
-            StringBuilder sb = new StringBuilder();
-            sb.Append("\r\n");
-
-            var fields = this.GetType().GetFields();
-
-            foreach (var item in fields)
-            {
-                var value = item.GetValue(this);
-                sb.AppendFormat("-- {0}: {1}\r\n", item.Name, FormatValue(value));
-            }
-
-            return sb.ToString();
-        }
+            LBLModeR1Coordinates = (double.NaN, double.NaN);
+            LBLModeR2Coordinates = (double.NaN, double.NaN);
+            LBLModeR3Coordinates = (double.NaN, double.NaN);
+            
+            LBLMode_RErr_Threshold_m = 10.0;
+            LBLMode_Use_DHFilter = false;
+            LBLMode_DHFilter_MaxSpeed_mps = 1.0;
+            LBLMode_DHFilter_Threshold_m = 5.0;
+            LBLMode_DHFilter_FIFO_Size = 8;
+            LBLMode_Use_SFilter = false;
+            LBLMode_SFilter_Threshold_m = 20.0;
+            LBLMode_SFilter_FIFO_Size = 4;
+        }       
 
         #endregion
     }

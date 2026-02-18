@@ -9,12 +9,16 @@
     <PlatformTarget>AnyCPU</PlatformTarget>
     <Copyright>Underwater communication &amp; navigation laboratory, LLC</Copyright>
     <Company>Underwater communication &amp; navigation laboratory, LLC</Company>
-    <Version>1.0.2</Version>
     <Description>Zima2 underwater acoustic positioning system host application</Description>
 	<EnablePackageValidation>false</EnablePackageValidation>
 	<CheckForVulnerablePackages>false</CheckForVulnerablePackages>
-	<AssemblyVersion>1.0.3.0</AssemblyVersion>
-	<FileVersion>1.0.3.0</FileVersion>
+	<AssemblyVersion>1.0.0.0</AssemblyVersion>
+	<FileVersion>1.0.0.0</FileVersion>
+	<MajorVersion>1</MajorVersion>
+	<MinorVersion>0</MinorVersion>
+	<PatchVersion>5</PatchVersion>	
+	<BuildNumber Condition=" '$(BuildNumber)' == '' ">$([System.DateTime]::Now.ToString("HHmm"))</BuildNumber>
+	<Version>$(MajorVersion).$(MinorVersion).$(PatchVersion).$(BuildNumber)</Version>
   </PropertyGroup>
 
   <ItemGroup>

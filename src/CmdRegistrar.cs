@@ -6,7 +6,6 @@ namespace AzimuthConsole
 {
     public class CmdRegistrar
     {
-      
         public void RegisterTerminalCommands(SettingsContainer settings, CmdProcessor proc, AZMCombiner combiner)
         {
             RegisterConnectCommand(proc, combiner);
@@ -25,6 +24,8 @@ namespace AzimuthConsole
             RegisterPauseInterrogationCommand(proc, combiner);
             RegisterResumeInterrogationCommand(proc, combiner);
             RegisterLocationAndHeadingOverrideCommand(proc, combiner);
+
+            RegisterShowSettingsCommand(settings, proc);
         }
 
         public void RegisterCommandLineCommands(SettingsContainer settings, CmdProcessor proc, AZMCombiner combiner) 
@@ -35,6 +36,7 @@ namespace AzimuthConsole
             RegisterSetAntennaRelativePosition(settings, proc);
             RegisterSet3RespondersCoordinatesCommand(settings, proc, combiner);
             RegisterSetResponderIndividualUDPOutput(settings, proc, combiner);
+            RegisterConfigureFiltersCommand(settings, proc);            
         }
 
         public void RegisterRCTRLCommands(SettingsContainer settings, CmdProcessor proc, AZMCombiner combiner)
@@ -60,6 +62,76 @@ namespace AzimuthConsole
         }
 
 
+        private void RegisterShowSettingsCommand(SettingsContainer settings, CmdProcessor proc)
+        {
+            proc.AddCommand("SETS?", "", args =>
+            {
+                proc.OnOutput(settings.ToString());
+                return true;
+            }, "Shows application settings.");
+        }
+
+
+        private void RegisterConfigureFiltersCommand(SettingsContainer settings, CmdProcessor proc)
+        {
+            proc.AddCommand("FLTS", "x,x.x,x,x.x,x.x,x.x,x,x.x,x,x.x,x.x", args =>
+            {
+                bool result = true;
+
+                var usbl_sf_fifo = args[0] != null ? AZM.AZM.O2S32(args[0]) : settings.USBLMode_SFilter_FIFO_Size;
+                var usbl_sf_thld = args[1] != null ? AZM.AZM.O2D(args[1]) : settings.USBLMode_SFilter_Threshold;
+                var usbl_df_fifo = args[2] != null ? AZM.AZM.O2S32(args[2]) : settings.USBLMode_DHFilter_FIFO_Size;
+                var usbl_df_mspeed = args[3] != null ? AZM.AZM.O2D(args[3]) : settings.USBLMode_DHFilter_MaxSpeed_mps;
+                var usbl_df_thld = args[4] != null ? AZM.AZM.O2D(args[4]) : settings.USBLMode_DHFilter_Threshold_m;
+
+                var lbl_rer_thld = args[5] != null ? AZM.AZM.O2D(args[5]) : settings.LBLMode_RErr_Threshold_m;
+
+                var lbl_sf_fifo = settings.LBLMode_SFilter_FIFO_Size;
+                var lbl_sf_thld = settings.LBLMode_SFilter_Threshold_m;
+                var lbl_df_fifo = settings.LBLMode_DHFilter_FIFO_Size;
+                var lbl_df_mspeed = settings.LBLMode_DHFilter_MaxSpeed_mps;
+                var lbl_df_thld = settings.LBLMode_DHFilter_Threshold_m;
+
+                if ((args[6] != null) && (args[7] != null))
+                {
+                    lbl_sf_fifo = AZM.AZM.O2S32(args[6]);
+                    lbl_sf_thld = AZM.AZM.O2D(args[7]);
+                    settings.LBLMode_Use_SFilter = true;
+                }
+                else
+                {
+                    settings.LBLMode_Use_SFilter = false;
+                }
+
+                if ((args[8] != null) && (args[9] != null) &&
+                    (args[10]  != null))
+                {
+                    lbl_df_fifo = AZM.AZM.O2S32(args[8]);
+                    lbl_df_mspeed = AZM.AZM.O2D(args[9]);
+                    lbl_df_thld = AZM.AZM.O2D(args[10]);
+                    settings.LBLMode_Use_DHFilter = true;
+                }
+                else
+                {
+                    settings.LBLMode_Use_DHFilter = false;
+                }
+
+                settings.USBLMode_SFilter_FIFO_Size = usbl_sf_fifo;
+                settings.USBLMode_SFilter_Threshold = usbl_sf_thld;
+                settings.USBLMode_DHFilter_FIFO_Size = usbl_df_fifo;
+                settings.USBLMode_DHFilter_MaxSpeed_mps = usbl_df_mspeed;
+                settings.USBLMode_DHFilter_Threshold_m = usbl_df_thld;
+
+                settings.LBLMode_SFilter_FIFO_Size = lbl_sf_fifo;
+                settings.LBLMode_SFilter_Threshold_m = lbl_sf_thld;
+                settings.LBLMode_DHFilter_FIFO_Size = lbl_df_fifo;
+                settings.LBLMode_DHFilter_MaxSpeed_mps = lbl_df_mspeed;
+                settings.LBLMode_DHFilter_Threshold_m = lbl_df_thld;
+
+                return result;
+            },
+            "Configure track filters. Usage: FLTS,usbl_sf_fifo,usbl_sf_thld,usbl_df_fifo,usbl_df_mspeed,usbl_df_thld,lbl_rer_thld,lbl_sf_fifo,lbl_sf_thld,lbl_df_fifo,lbl_df_mspeed,lbl_df_thld");
+        }
 
         private void RegisterLocationAndHeadingOverrideCommand(CmdProcessor proc, AZMCombiner combiner)
         {
@@ -370,12 +442,9 @@ namespace AzimuthConsole
 
                 if (lblRCMode != LBLResponderCoordinatesModeEnum.None)
                 {
-                    settings.LBLModeR1X = r1x;
-                    settings.LBLModeR1Y = r1y;
-                    settings.LBLModeR2X = r2x;
-                    settings.LBLModeR2Y = r2y;
-                    settings.LBLModeR3X = r3x;
-                    settings.LBLModeR3Y = r3y;
+                    settings.LBLModeR1Coordinates = (r1x, r1y);
+                    settings.LBLModeR2Coordinates = (r2x, r2y);
+                    settings.LBLModeR3Coordinates = (r3x, r3y);
                 }
 
                 return true;
