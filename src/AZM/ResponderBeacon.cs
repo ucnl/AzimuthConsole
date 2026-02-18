@@ -4,7 +4,6 @@ using System.Text;
 using UCNLDrivers;
 using UCNLNav;
 using UCNLNav.TrackFilters;
-using UCNLNMEA;
 
 namespace AzimuthConsole.AZM
 {
@@ -56,7 +55,7 @@ namespace AzimuthConsole.AZM
             get => IsIUDPInitialized ? $"{UDPOutput?.Address}:{UDPOutput?.Port}" : string.Empty;
         }
 
-        public string SuccessfulRequestStatistics => TotalRequests > 0 ? $"{100.0 * SuccededRequests / TotalRequests:F01}% ({SuccededRequests}/{TotalRequests})" : "- - -";
+        public string SuccessfulRequestStatistics => TotalRequests > 0 ? $"{100.0 * SuccededRequests / TotalRequests:F01} % ({SuccededRequests}/{TotalRequests})" : "- - -";
 
         public ResponderBeacon(REMOTE_ADDR_Enum id)
         {
@@ -174,58 +173,8 @@ namespace AzimuthConsole.AZM
 
         public string ToNMEAStrings()
         {
-            StringBuilder sb = new();
-
-            var ltCardinal = Lat_deg.IsInitializedAndNotObsolete ? (Lat_deg.Value > 0 ? "N" : "S") : string.Empty;
-            var lnCardinal = Lon_deg.IsInitializedAndNotObsolete ? (Lon_deg.Value > 0 ? "E" : "W") : string.Empty;
-
-            bool location_valid = Lat_deg.IsInitializedAndNotObsolete && Lon_deg.IsInitializedAndNotObsolete;
-
-            sb.Append(
-                NMEAParser.BuildSentence(
-                    TalkerIdentifiers.GN,
-                    SentenceIdentifiers.RMC,
-                    [
-                        DateTime.UtcNow,
-                        location_valid ? "Valid" : "Invalid",
-                        location_valid ? Lat_deg.Value : null, ltCardinal,
-                        location_valid ? Lon_deg.Value : null, lnCardinal,
-                        null,
-                        null,
-                        DateTime.UtcNow,
-                        null,
-                        null,
-                        location_valid ? "A" : "V",
-                    ]));
-
-            sb.Append(
-                NMEAParser.BuildSentence(
-                    TalkerIdentifiers.GN,
-                    SentenceIdentifiers.GGA,
-                    [
-                        DateTime.UtcNow,                        
-                        location_valid ? Lat_deg.Value : null, ltCardinal,
-                        location_valid ? Lon_deg.Value : null, lnCardinal,
-                        "GPS fix",
-                        4,
-                        null,
-                        Depth_m.IsInitializedAndNotObsolete ? -Depth_m.Value : null,
-                        "M",
-                        null,
-                        "M",
-                        null,
-                        null,
-                    ]));
-
-            sb.Append(
-                NMEAParser.BuildSentence(
-                    TalkerIdentifiers.GN,
-                    SentenceIdentifiers.MTW,
-                    [
-                        WaterTemp_C.IsInitializedAndNotObsolete ? WaterTemp_C.Value : null,
-                    ]));
-
-            return sb.ToString();
+            return Utils.BuildRMCGGAMTWNMEAMessages(
+                Lat_deg, Lon_deg, DateTime.UtcNow, Depth_m, WaterTemp_C);
         }
 
         public void SendToIUDP(string data)

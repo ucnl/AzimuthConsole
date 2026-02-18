@@ -167,25 +167,6 @@ namespace AzimuthConsole.AZM
 
         public static readonly double CRANGE = 499;
 
-
-
-        static readonly Dictionary<string, ICs> ICsIdxArray = new()
-        {
-            { "0", ICs.IC_D2H_ACK },
-            { "1", ICs.IC_D2D_STRSTP },
-            { "2", ICs.IC_D2D_RSTS },
-            { "3", ICs.IC_D2H_NDTA },
-            { "4", ICs.IC_H2D_DPTOVR },
-            { "5", ICs.IC_D2H_RUCMD },
-            { "6", ICs.IC_D2H_RBCAST },
-            { "7", ICs.IC_H2D_CREQ },
-            { "8", ICs.IC_D2D_CSET },
-            { "?", ICs.IC_H2D_DINFO_GET },
-
-            { "!", ICs.IC_D2H_DINFO },
-            { "-", ICs.IC_ANY },
-        };
-
         public static readonly Func<object, IC_RESULT_Enum> O2_IC_RESULT_Enum = o => o == null ? IC_RESULT_Enum.IC_RES_INVALID : (IC_RESULT_Enum)(int)o;
         public static readonly Func<object, REMOTE_ADDR_Enum> O2_REMOTE_ADDR_Enum = o => o == null ? REMOTE_ADDR_Enum.REM_ADDR_INVALID : (REMOTE_ADDR_Enum)((int)o);
         public static readonly Func<object, NDTA_Status_Enum> O2_NDTA_Status_Enum = o => o == null ? NDTA_Status_Enum.NDTA_INVALID : (NDTA_Status_Enum)(int)o;
@@ -214,23 +195,22 @@ namespace AzimuthConsole.AZM
         public static readonly Func<double, bool> IsLatDeg = v => IsInRangeInclusive(v, -90, 90);
         public static readonly Func<double, bool> IsLonDeg = v => IsInRangeInclusive(v, -180, 180);
         public static readonly Func<double, bool> IsHdnDeg = v => IsInRangeInclusive(v, 0, 360);
-
+        public static readonly Func<double, bool> IsStyPSU = v => IsInRangeInclusive(v, 0, 40);
+        public static readonly Func<double, bool> IsMaxDst = v => IsInRangeInclusive(v, AZM.ABS_MIN_RANGE_M, ABS_MAX_RANGE_M);
 
         #endregion
 
         #region Methods
 
         public static IEnumerable<REMOTE_ADDR_Enum> GetAddrsByMask(ushort mask)
-        {
-            List<REMOTE_ADDR_Enum> result = [];
+        {          
+            if (mask == 0) yield break;
 
-            for (ushort i = 0; i < mask; i++)
+            for (ushort i = 0; i < 16; i++)
             {
                 if ((mask & (1 << i)) != 0)
-                    result.Add((REMOTE_ADDR_Enum)i);
+                    yield return (REMOTE_ADDR_Enum)i;
             }
-
-            return result;
         }
 
         public static string Addr2Str(REMOTE_ADDR_Enum addr)
@@ -245,20 +225,30 @@ namespace AzimuthConsole.AZM
 
         public static bool IsUserDataReqCode(CDS_REQ_CODES_Enum rc_req_code)
         {
-            return ((int)rc_req_code >= (int)CDS_REQ_CODES_Enum.CDS_REQ_USER_CMD_27) && ((int)rc_req_code <= (int)CDS_REQ_CODES_Enum.CDS_REQ_USER_CMD_0);
-        }
+            return ((int)rc_req_code >= (int)CDS_REQ_CODES_Enum.CDS_REQ_USER_CMD_27) && 
+                   ((int)rc_req_code <= (int)CDS_REQ_CODES_Enum.CDS_REQ_USER_CMD_0);
+        }        
 
-        public static ICs ICsByMessageID(string msgID)
+        public static ICs ICsByMessageID(string msgID) => msgID switch
         {
-            if (ICsIdxArray.ContainsKey(msgID))
-                return ICsIdxArray[msgID];
-            else
-                return ICs.IC_INVALID;
-        }
+            "0" => ICs.IC_D2H_ACK,
+            "1" => ICs.IC_D2D_STRSTP,
+            "2" => ICs.IC_D2D_RSTS,
+            "3" => ICs.IC_D2H_NDTA,
+            "4" => ICs.IC_H2D_DPTOVR,
+            "5" => ICs.IC_D2H_RUCMD,
+            "6" => ICs.IC_D2H_RBCAST,
+            "7" => ICs.IC_H2D_CREQ,
+            "8" => ICs.IC_D2D_CSET,
+            "?" => ICs.IC_H2D_DINFO_GET,
+            "!" => ICs.IC_D2H_DINFO,
+            "-" => ICs.IC_ANY,
+            _ => ICs.IC_INVALID
+        };
 
         public static string BCDVersionToStr(int versionData)
         {
-            return string.Format("{0}.{1}", (versionData >> 0x08).ToString(), (versionData & 0xff).ToString("X2"));
+            return $"{(versionData >> 0x08)}.{(versionData & 0xff):X2}";
         }
 
         #endregion

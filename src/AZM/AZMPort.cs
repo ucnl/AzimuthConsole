@@ -3,42 +3,27 @@ using UCNLNMEA;
 
 namespace AzimuthConsole.AZM
 {
-    #region Miscelaneous EventArgs
     public class ACKReceivedEventArgs : EventArgs
     {
         // $PAZM0,[cmdID],result
 
-        #region Properties
         public ICs SentenceID { get; private set; }
         public IC_RESULT_Enum ResultID { get; private set; }
-
-        #endregion
-
-        #region Constructor
 
         public ACKReceivedEventArgs(ICs sntID, IC_RESULT_Enum resID)
         {
             SentenceID = sntID;
             ResultID = resID;
         }
-
-        #endregion
     }
 
     public class STRSTPReceivedEventArgs : EventArgs
     {
         // $PAZM1,[addrMask],[sty_PSU],[soundSpeed_mps],[maxDist_m]
-
-        #region Properties
-
         public ushort AddrMask { get; private set; }
         public double Sty_PSU { get; private set; }
         public double SoundSpeed_mps { get; private set; }
         public double MaxDist_m { get; private set; }
-
-        #endregion
-
-        #region Constructor
 
         public STRSTPReceivedEventArgs(ushort addrMask, double sty_PSU, double soundSpeed_mps, double maxDist_m)
         {
@@ -47,38 +32,26 @@ namespace AzimuthConsole.AZM
             SoundSpeed_mps = soundSpeed_mps;
             MaxDist_m = maxDist_m;
         }
-
-        #endregion
     }
 
     public class RSTSReceivedEventArgs : EventArgs
     {
         // $PAZM2,[addr],[sty_PSU]
-        #region Properties
-
         public REMOTE_ADDR_Enum Addr { get; private set; }
         public double Sty_PSU { get; private set; }
 
         public bool IsStyPresent { get => !double.IsNaN(Sty_PSU); }
-
-        #endregion
-
-        #region Constructor
 
         public RSTSReceivedEventArgs(REMOTE_ADDR_Enum addr, double sty_PSU)
         {
             Addr = addr;
             Sty_PSU = sty_PSU;
         }
-
-        #endregion
     }
 
     public class NDTAReceivedEventArgs : EventArgs
     {
         // $PAZM3,status,[addr],[rq_code],[rs_code],[msr_dB],[p_time],[s_range],[p_range],[r_dpt],[a],[e],[lprs],[ltmp],[lhdn],[lpts],[lrol]
-
-        #region Properties        
 
         public NDTA_Status_Enum Status { get; private set; }
 
@@ -112,10 +85,6 @@ namespace AzimuthConsole.AZM
 
         public double LocRoll_deg { get; private set; }
 
-        #endregion
-
-        #region Constructor
-
         public NDTAReceivedEventArgs(NDTA_Status_Enum status, REMOTE_ADDR_Enum addr, CDS_REQ_CODES_Enum reqCode,
             int resCode, double msr_dB, double p_time, double s_range, double p_range, double r_dpt,
             double a, double e, double lprs, double ltmp, double lhdn, double lpts, double lrol)
@@ -137,106 +106,73 @@ namespace AzimuthConsole.AZM
             LocPitch_deg = lpts;
             LocRoll_deg = lrol;
         }
-
-        #endregion
     }
 
     public class RUCMDReceivedEventArgs : EventArgs
     {
         // $PAZM5,cmdID
-        #region Properties
-
         public CDS_REQ_CODES_Enum CmdID { get; private set; }
-
-        #endregion
-
-        #region Constructor
 
         public RUCMDReceivedEventArgs(CDS_REQ_CODES_Enum cmdID)
         {
             CmdID = cmdID;
         }
-
-        #endregion
     }
 
     public class RBCASTReceivedEventArgs : EventArgs
     {
         // $PAZM6,cmdID
-        #region Properties
-
         public CDS_RBCAST_CODES_Enum CmdID { get; private set; }
-
-        #endregion
-
-        #region Constructor
 
         public RBCASTReceivedEventArgs(CDS_RBCAST_CODES_Enum cmdID)
         {
             CmdID = cmdID;
         }
-
-
-        #endregion
     }
 
     public class CSETReceivedEventArgs : EventArgs
     {
         // $PAZM8,dataID,dataVal,reserved
-        #region Properties
-
         public CDS_REQ_CODES_Enum UserDataID { get; private set; }
         public int UserDataValue { get; private set; }
-
-        #endregion
-
-        #region Constructor
 
         public CSETReceivedEventArgs(CDS_REQ_CODES_Enum udid, int udval)
         {
             UserDataID = udid;
             UserDataValue = udval;
         }
-
-
-        #endregion
     }
-
-    #endregion
 
     public class AZMPort : uSerialPort
     {
-        #region Properties
-
         static bool nmeaSingleton = false;
 
         bool isWaitingLocal = false;
         public bool IsWaitingLocal
         {
-            get { return isWaitingLocal; }
+            get => isWaitingLocal; 
             private set
             {
                 isWaitingLocal = value;
-                IsWaitingLocalChangedEventHandler.Rise(this, new EventArgs());
+                IsWaitingLocalChangedEventHandler?.Invoke(this, new EventArgs());
             }
         }
 
         ICs? lastQueryID = ICs.IC_INVALID;
 
 
-        public bool IsDeviceInfoValid { get; private set; }
+        public bool IsDeviceInfoValid { get; private set; } = false;
         public AZM_DEVICE_TYPE_Enum DeviceType { get; private set; }
         public REMOTE_ADDR_Enum RemoteAddress { get; private set; }
         public ushort AddressMask { get; private set; }
         public AZM_PTS_TYPE_Enum PTSType { get; private set; }
-        public string SerialNumber { get; private set; }
-        public string SystemInfo { get; private set; }
-        public string SystemVersion { get; private set; }
+        public string SerialNumber { get; private set; } = string.Empty;
+        public string SystemInfo { get; private set; } = string.Empty;
+        public string SystemVersion { get; private set; } = string.Empty;
         public int ChannelID { get; private set; }
 
-        #endregion
-
-        #region Constructor
+        private const int DefaultTimeoutMs = 1000;
+        private const int RSTSTimeoutMs = 3000;
 
         public AZMPort(BaudRate baudRate)
             : base(baudRate)
@@ -245,154 +181,116 @@ namespace AzimuthConsole.AZM
             base.IsLogIncoming = true;
             base.IsTryAlways = true;
 
-            SerialNumber = string.Empty;
-            SystemInfo = string.Empty;
-            SystemVersion = string.Empty;
-
-
             NMEAInit();
         }
 
-        #endregion
-
-        #region Methods
-
-        #region Private
-
         private static void NMEAInit()
         {
-            if (!nmeaSingleton)
+            if (nmeaSingleton)
+                return;
+
+            nmeaSingleton = true;
+
+            NMEAParser.AddManufacturerToProprietarySentencesBase(ManufacturerCodes.AZM);
+
+            var snts = new[]
             {
-                nmeaSingleton = true;
-                NMEAParser.AddManufacturerToProprietarySentencesBase(ManufacturerCodes.AZM);
+                ("0", "x,x"),                   // IC_D2H_ACK       '0'  $PAZM0,[cmdID],result
+                ("1", "x,x.x,x.x,x.x"),         // IC_D2D_STRSTP    '1'  $PAZM1,[addrMask],[sty_PSU],[soundSpeed_mps],[maxDist_m]
+                ("2", "x,x.x"),                 // IC_D2D_RSTS      '2'  $PAZM2,[addr],[sty_PSU]
+                ("3", "x,x,x,x,x.x,x.x,x.x,x.x,x.x,x.x,x.x,x.x,x.x,x.x,x.x,x.x"), //IC_D2H_NDTA  '3' $PAZM3,status,[addr],[rq_code],[rs_code],[msr_dB],[p_time],[s_range],[p_range],[r_dpt],[a],[e],[lprs],[ltmp],[lhdn],[lpts],[lrol]
+                ("4", "x.x"),                   // IC_H2D_DPTOVR    '4'  $PAZM4,depth_m
+                ("5", "x"),                     // IC_D2H_RUCMD     '5'  $PAZM5,cmdID
+                ("6", "x"),                     // IC_D2H_RBCAST    '6'  $PAZM6,cmdID
+                ("7", "x,x"),                   // IC_H2D_CREQ      '7'  $PAZM7,[addr],user_data_id
+                ("8", "x,x,x"),                 // IC_H2D_CSET      '8'  $PAZM8,user_data_id,user_data_value,[reserved]
+                ("?", "x"),                     // IC_H2D_DINFO_GET '?'  $PAZM?,[reserved]
+                ("!", "x,x,c--c,c--c,x,x,x,x"), // IC_D2H_DINFO     '!' $PAZM!,d_type,address,serialNumber,sys_info,sys_version,pts_type,dl_ch_id,ul_ch_id
+            };
 
-                //IC_D2H_ACK              '0' // $PAZM0,[cmdID],result
-                NMEAParser.AddProprietarySentenceDescription(ManufacturerCodes.AZM, "0", "x,x");
-
-                //IC_D2D_STRSTP           '1' // $PAZM1,[addrMask],[sty_PSU],[soundSpeed_mps],[maxDist_m]
-                NMEAParser.AddProprietarySentenceDescription(ManufacturerCodes.AZM, "1", "x,x.x,x.x,x.x");
-
-                //IC_D2D_RSTS             '2' // $PAZM2,[addr],[sty_PSU]
-                NMEAParser.AddProprietarySentenceDescription(ManufacturerCodes.AZM, "2", "x,x.x");
-
-                //IC_D2H_NDTA             '3' // $PAZM3,status,[addr],[rq_code],[rs_code],[msr_dB],[p_time],[s_range],[p_range],[r_dpt],[a],[e],[lprs],[ltmp],[lhdn],[lpts],[lrol]
-                NMEAParser.AddProprietarySentenceDescription(ManufacturerCodes.AZM, "3", "x,x,x,x,x.x,x.x,x.x,x.x,x.x,x.x,x.x,x.x,x.x,x.x,x.x,x.x");
-
-                //IC_H2D_DPTOVR           '4' // $PAZM4,depth_m
-                NMEAParser.AddProprietarySentenceDescription(ManufacturerCodes.AZM, "4", "x.x");
-
-                //IC_D2H_RUCMD            '5' // $PAZM5,cmdID
-                NMEAParser.AddProprietarySentenceDescription(ManufacturerCodes.AZM, "5", "x");
-
-                //IC_D2H_RBCAST           '6' // $PAZM6,cmdID
-                NMEAParser.AddProprietarySentenceDescription(ManufacturerCodes.AZM, "6", "x");
-
-                //IC_H2D_DINFO_GET        '?' // $PAZM?,[reserved]
-                NMEAParser.AddProprietarySentenceDescription(ManufacturerCodes.AZM, "?", "x");
-
-                //IC_D2H_DINFO            '!' // $PAZM!,d_type,address,serialNumber,sys_info,sys_version,pts_type,dl_ch_id,ul_ch_id
-                NMEAParser.AddProprietarySentenceDescription(ManufacturerCodes.AZM, "!", "x,x,c--c,c--c,x,x,x,x");
-
-
-                //IC_H2D_CREQ             '7' // $PAZM7,[addr],user_data_id
-                NMEAParser.AddProprietarySentenceDescription(ManufacturerCodes.AZM, "7", "x,x");
-
-                //IC_H2D_CSET             '8' // $PAZM8,user_data_id,user_data_value,[reserved]
-                NMEAParser.AddProprietarySentenceDescription(ManufacturerCodes.AZM, "8", "x,x,x");
+            foreach (var (id, format) in snts)
+            {
+                NMEAParser.AddProprietarySentenceDescription(ManufacturerCodes.AZM, id, format);
             }
         }
 
         private bool TrySend(string message, ICs queryID)
         {
-            bool result = detected && !IsWaitingLocal;
+            if (!detected || IsWaitingLocal)
+                return false;
 
-            if (result)
+            try
             {
-                try
-                {
-                    Send(message);
+                Send(message);
 
-                    if (queryID == ICs.IC_D2D_RSTS)
-                        StartTimer(3000);
-                    else
-                        StartTimer(1000);
+                var timeout = queryID == ICs.IC_D2D_RSTS ? RSTSTimeoutMs : DefaultTimeoutMs;
+                StartTimer(timeout);
 
-                    IsWaitingLocal = true;
-
-                    lastQueryID = queryID;
-                    result = true;
-                }
-                catch (Exception ex)
-                {
-                    LogEventHandler.Rise(this, new LogEventArgs(LogLineType.ERROR, ex));
-                }
+                IsWaitingLocal = true;
+                lastQueryID = queryID;
+                    
+                return true;
             }
-
-            return result;
+            catch (Exception ex)
+            {
+                LogEventHandler?.Invoke(this, new LogEventArgs(LogLineType.ERROR, ex));
+                return false;
+            }
         }
 
-        #region Parsers
+        private void SafeParse(Action parseAction, string sentenceType)
+        {
+            try
+            {
+                parseAction();
+            }
+            catch (Exception ex)
+            {
+                LogError($"Error parsing {sentenceType}", ex);
+            }
+        }
 
-        private void Parse_ACK(object[] parameters)
+        private void Parse_ACK(object[] parameters) => SafeParse(() =>
         {
             // $PAZM0,[cmdID],result
-            try
-            {
-                ICs sntID = AZM.ICsByMessageID(parameters[0].ToString());
-                IC_RESULT_Enum resID = AZM.O2_IC_RESULT_Enum(parameters[1]);
+            
+            ICs sntID = AZM.ICsByMessageID(parameters[0].ToString());
+            IC_RESULT_Enum resID = AZM.O2_IC_RESULT_Enum(parameters[1]);
 
-                StopTimer();
-                IsWaitingLocal = false;
+            StopTimer();
+            IsWaitingLocal = false;
 
-                ACKReceived.Rise(this, new ACKReceivedEventArgs(sntID, resID));
-            }
-            catch (Exception ex)
-            {
-                LogEventHandler.Rise(this, new LogEventArgs(LogLineType.ERROR, ex));
-            }
-        }
+            ACKReceived?.Invoke(this, new ACKReceivedEventArgs(sntID, resID));
+        }, "AZM0");
 
-        private void Parse_RSTS(object[] parameters)
+        private void Parse_RSTS(object[] parameters) => SafeParse(() =>
         {
             // $PAZM2,[addr],[sty_PSU]
-            try
-            {
-                StopTimer();
-                IsWaitingLocal = false;
 
-                REMOTE_ADDR_Enum addr = AZM.O2_REMOTE_ADDR_Enum(parameters[0]);
-                double sty_PSU = AZM.O2D(parameters[1]);
+            StopTimer();
+            IsWaitingLocal = false;
 
-                RSTSReceived.Rise(this, new RSTSReceivedEventArgs(addr, sty_PSU));
-            }
-            catch (Exception ex)
-            {
-                LogEventHandler.Rise(this, new LogEventArgs(LogLineType.ERROR, ex));
-            }
-        }
+            REMOTE_ADDR_Enum addr = AZM.O2_REMOTE_ADDR_Enum(parameters[0]);
+            double sty_PSU = AZM.O2D(parameters[1]);
 
-        private void Parse_STRSTP(object[] parameters)
+            RSTSReceived?.Invoke(this, new RSTSReceivedEventArgs(addr, sty_PSU));
+        }, "AZM2");
+
+        private void Parse_STRSTP(object[] parameters) => SafeParse(() =>
         {
             // $PAZM1,[addrMask],[sty_PSU],[soundSpeed_mps],[maxDist_m]
-            try
-            {
-                StopTimer();
-                IsWaitingLocal = false;
+            StopTimer();
+            IsWaitingLocal = false;
 
-                ushort addrMask = AZM.O2U16(parameters[0]);
-                double sty_PSU = AZM.O2D(parameters[1]);
-                double soundSpeed_mps = AZM.O2D(parameters[2]);
-                double maxDist_m = AZM.O2D(parameters[3]);
+            ushort addrMask = AZM.O2U16(parameters[0]);
+            double sty_PSU = AZM.O2D(parameters[1]);
+            double soundSpeed_mps = AZM.O2D(parameters[2]);
+            double maxDist_m = AZM.O2D(parameters[3]);
 
-                STRSTPReceived.Rise(this, new STRSTPReceivedEventArgs(addrMask, sty_PSU, soundSpeed_mps, maxDist_m));
-            }
-            catch (Exception ex)
-            {
-                LogEventHandler.Rise(this, new LogEventArgs(LogLineType.ERROR, ex));
-            }
-        }
+            STRSTPReceived?.Invoke(this, new STRSTPReceivedEventArgs(addrMask, sty_PSU, soundSpeed_mps, maxDist_m));
+        }, "AZM1");
 
-        private void Parse_NDTA(object[] parameters)
+        private void Parse_NDTA(object[] parameters) => SafeParse(() =>
         {
             // status,[addr],[rq_code],[rs_code],[msr_dB],[p_time],[s_range],[p_range],[r_dpt],[a],[e],[lprs],[ltmp],[lhdn],[lptc],[lrol]
 
@@ -400,8 +298,6 @@ namespace AzimuthConsole.AZM
             if (IsActive)
                 StartTimer(3000);
 
-            try
-            {
                 NDTA_Status_Enum status = AZM.O2_NDTA_Status_Enum(parameters[0]);
                 REMOTE_ADDR_Enum addr = AZM.O2_REMOTE_ADDR_Enum(parameters[1]);
                 CDS_REQ_CODES_Enum req_code = AZM.O2_CDS_REQ_CODES_Enum(parameters[2]);
@@ -419,106 +315,75 @@ namespace AzimuthConsole.AZM
                 double lptc_deg = AZM.O2D(parameters[14]);
                 double lrol_deg = AZM.O2D(parameters[15]);
 
-                NDTAReceived.Rise(this,
+                NDTAReceived?.Invoke(this,
                     new NDTAReceivedEventArgs(status, addr, req_code, res_code,
                     msr_dB, p_time_s,
                     s_range_m, p_range_m, r_dpt_m,
                     a_deg, e_deg,
                     lprs_mBar, ltmp_C, lhdn_deg, lptc_deg, lrol_deg));
-            }
-            catch (Exception ex)
-            {
-                LogEventHandler.Rise(this, new LogEventArgs(LogLineType.ERROR, ex));
-            }
-        }
+        }, "AZM3");
 
-        private void Parse_RUCMD(object[] parameters)
+        private void Parse_RUCMD(object[] parameters) => SafeParse(() =>
         {
             // $PAZM5,cmdID
-            try
-            {
-                CDS_REQ_CODES_Enum cmdID = AZM.O2_CDS_REQ_CODES_Enum(parameters[0]);
-                RUCMDReceived.Rise(this, new RUCMDReceivedEventArgs(cmdID));
-            }
-            catch (Exception ex)
-            {
-                LogEventHandler.Rise(this, new LogEventArgs(LogLineType.ERROR, ex));
-            }
-        }
+            CDS_REQ_CODES_Enum cmdID = AZM.O2_CDS_REQ_CODES_Enum(parameters[0]);
+            RUCMDReceived?.Invoke(this, new RUCMDReceivedEventArgs(cmdID));
+        }, "AZM5");
 
-        private void Parse_RBCAST(object[] parameters)
+        private void Parse_RBCAST(object[] parameters) => SafeParse(() =>
         {
             // $PAZM6,cmdID
-            try
-            {
-                CDS_RBCAST_CODES_Enum cmdID = AZM.O2_CDS_RBCAST_CODES_Enum(parameters[0]);
-                RBCASTReceived.Rise(this, new RBCASTReceivedEventArgs(cmdID));
-            }
-            catch (Exception ex)
-            {
-                LogEventHandler.Rise(this, new LogEventArgs(LogLineType.ERROR, ex));
-            }
-        }
+            CDS_RBCAST_CODES_Enum cmdID = AZM.O2_CDS_RBCAST_CODES_Enum(parameters[0]);
+            RBCASTReceived?.Invoke(this, new RBCASTReceivedEventArgs(cmdID));
+        }, "AZM6");
 
-        private void Parse_DINFO(object[] parameters)
+        private void Parse_DINFO(object[] parameters) => SafeParse(() =>
         {
             // $PAZM!,d_type,address,serialNumber,sys_info,sys_version,pts_type,dl_ch_id,ul_ch_id
-            try
-            {
-                DeviceType = AZM.O2_AZM_DEVICE_TYPE_Enum(parameters[0]);
+            DeviceType = AZM.O2_AZM_DEVICE_TYPE_Enum(parameters[0]);
 
-                AddressMask = 0;
-                RemoteAddress = REMOTE_ADDR_Enum.REM_ADDR_INVALID;
+            AddressMask = 0;
+            RemoteAddress = REMOTE_ADDR_Enum.REM_ADDR_INVALID;
 
-                if (DeviceType == AZM_DEVICE_TYPE_Enum.DT_USBL_TSV)
-                    AddressMask = AZM.O2U16(parameters[1]);
-                else if (DeviceType == AZM_DEVICE_TYPE_Enum.DT_REMOTE)
-                    RemoteAddress = AZM.O2_REMOTE_ADDR_Enum(parameters[1]);
+            if (DeviceType == AZM_DEVICE_TYPE_Enum.DT_USBL_TSV)
+                AddressMask = AZM.O2U16(parameters[1]);
+            else if (DeviceType == AZM_DEVICE_TYPE_Enum.DT_REMOTE)
+                RemoteAddress = AZM.O2_REMOTE_ADDR_Enum(parameters[1]);
 
-                SerialNumber = AZM.O2S(parameters[2]);
-                SystemInfo = AZM.O2S(parameters[3]);
-                SystemVersion = AZM.BCDVersionToStr(AZM.O2S32(parameters[4]));
-                PTSType = AZM.O2_AZM_PTS_TYPE_Enum(parameters[5]);
+            SerialNumber = AZM.O2S(parameters[2]);
+            SystemInfo = AZM.O2S(parameters[3]);
+            SystemVersion = AZM.BCDVersionToStr(AZM.O2S32(parameters[4]));
+            PTSType = AZM.O2_AZM_PTS_TYPE_Enum(parameters[5]);
 
-                ChannelID = AZM.O2S32(parameters[6]);
+            ChannelID = AZM.O2S32(parameters[6]);
 
-                IsDeviceInfoValid = (DeviceType != AZM_DEVICE_TYPE_Enum.DT_INVALID) &&
-                                    (!string.IsNullOrEmpty(SerialNumber));
+            IsDeviceInfoValid = (DeviceType != AZM_DEVICE_TYPE_Enum.DT_INVALID) &&
+                                (!string.IsNullOrEmpty(SerialNumber));
 
-                DeviceInfoValidChanged.Rise(this, new EventArgs());
-            }
-            catch (Exception ex)
-            {
-                LogEventHandler.Rise(this, new LogEventArgs(LogLineType.ERROR, ex));
-            }
-        }
+            DeviceInfoValidChanged?.Invoke(this, new EventArgs());
+        }, "AZM!");
 
-
-        private void Parse_CSET(object[] parameters)
+        private void Parse_CSET(object[] parameters) => SafeParse(() =>
         {
             // $PAZM8,dataID,dataValue,reserved
 
             StopTimer();
             IsWaitingLocal = false;
 
-            try
-            {
-                CDS_REQ_CODES_Enum rcode = AZM.O2_CDS_REQ_CODES_Enum(parameters[0]);
-                int value = AZM.O2S32(parameters[1]);
+            CDS_REQ_CODES_Enum rcode = AZM.O2_CDS_REQ_CODES_Enum(parameters[0]);
+            int value = AZM.O2S32(parameters[1]);
 
-                CSETReceived.Rise(this, new CSETReceivedEventArgs(rcode, value));
-            }
-            catch (Exception ex)
-            {
-                LogEventHandler.Rise(this, new LogEventArgs(LogLineType.ERROR, ex));
-            }
+            CSETReceived?.Invoke(this, new CSETReceivedEventArgs(rcode, value));
+        }, "AZM8");
+
+
+        private void LogError(string context, Exception ex)
+        {
+            LogEventHandler?.Invoke(this,
+                new LogEventArgs(LogLineType.ERROR,
+                    $"AZMPort ({PortName}): {context} - {ex.Message}"));
         }
 
-        #endregion
-
-        #endregion
-
-        #region Public
 
         public bool Query_DINFO()
         {
@@ -544,20 +409,22 @@ namespace AzimuthConsole.AZM
             return Query_STRSTP(addrMask, double.NaN, double.NaN, maxDist_m);
         }
 
-        public bool Query_STRSTP(ushort addrMask, double sty_PSU, double soundSpeed_mps, double maxDist_m)
-        {
-            // $PAZM1,[addrMask],[sty_PSU],[soundSpeed_mps],[maxDist_m]
 
+        public bool Query_STRSTP(ushort addrMask = 0, double sty_PSU = double.NaN,
+            double soundSpeed_mps = double.NaN, double maxDist_m = double.NaN)
+        {
             var msg = NMEAParser.BuildProprietarySentence(ManufacturerCodes.AZM, "1",
-                [
-                    addrMask > 0 ? (int)addrMask : null,
-                    !double.IsNaN(sty_PSU) ? sty_PSU : null,
-                    !double.IsNaN(soundSpeed_mps) ? soundSpeed_mps : null,
-                    !double.IsNaN(maxDist_m) ? maxDist_m : null ]);
+                new object?[]
+                {
+                    addrMask > 0 ? (int?)addrMask : null,
+                    !double.IsNaN(sty_PSU) ? (double?)sty_PSU : null,
+                    !double.IsNaN(soundSpeed_mps) ? (double?)soundSpeed_mps : null,
+                    !double.IsNaN(maxDist_m) ? (double?)maxDist_m : null
+                });
 
             return TrySend(msg, ICs.IC_D2D_STRSTP);
         }
-
+        
         public bool Query_RemoteStySet(double sty_PSU)
         {
             return Query_RSTS(0, sty_PSU);
@@ -616,11 +483,6 @@ namespace AzimuthConsole.AZM
             return TrySend(msg, ICs.IC_D2D_CSET);
         }
 
-        #endregion
-
-        #endregion
-
-        #region uSerialPort
 
         public override void InitQuerySend()
         {
@@ -637,55 +499,40 @@ namespace AzimuthConsole.AZM
 
         public override void ProcessIncoming(NMEASentence sentence)
         {
-            if (sentence is NMEAProprietarySentence)
+            if (sentence is not NMEAProprietarySentence pSentence ||
+                pSentence.Manufacturer != ManufacturerCodes.AZM)
+                return;
+
+            if ((!detected) && ("0123568!".Contains(pSentence.SentenceIDString)))
             {
-                NMEAProprietarySentence? pSentence = (sentence as NMEAProprietarySentence);
+                detected = true;
+                StopTimer();
+            }
 
-                if (pSentence?.Manufacturer == ManufacturerCodes.AZM)
-                {
-                    if ((!detected) && ("0123568!".Contains(pSentence.SentenceIDString)))
-                    {
-                        detected = true;
-                        StopTimer();
-                    }
-
-                    if (pSentence.SentenceIDString == "0")
-                        Parse_ACK(pSentence.parameters);
-                    else if (pSentence.SentenceIDString == "1")
-                        Parse_STRSTP(pSentence.parameters);
-                    else if (pSentence.SentenceIDString == "2")
-                        Parse_RSTS(pSentence.parameters);
-                    else if (pSentence.SentenceIDString == "3")
-                        Parse_NDTA(pSentence.parameters);
-                    else if (pSentence.SentenceIDString == "5")
-                        Parse_RUCMD(pSentence.parameters);
-                    else if (pSentence.SentenceIDString == "6")
-                        Parse_RBCAST(pSentence.parameters);
-                    else if (pSentence.SentenceIDString == "8")
-                        Parse_CSET(pSentence.parameters);
-                    else if (pSentence.SentenceIDString == "!")
-                        Parse_DINFO(pSentence.parameters);
-                }
+            switch (pSentence.SentenceIDString)
+            {
+                case "0": Parse_ACK(pSentence.parameters); break;
+                case "1": Parse_STRSTP(pSentence.parameters); break;
+                case "2": Parse_RSTS(pSentence.parameters); break;
+                case "3": Parse_NDTA(pSentence.parameters); break;
+                case "5": Parse_RUCMD(pSentence.parameters); break;
+                case "6": Parse_RBCAST(pSentence.parameters); break;
+                case "8": Parse_CSET(pSentence.parameters); break;
+                case "!": Parse_DINFO(pSentence.parameters); break;
             }
         }
 
-        #endregion
-
-        #region Events
-
-        public EventHandler IsWaitingLocalChangedEventHandler;
+        public EventHandler? IsWaitingLocalChangedEventHandler;
         public EventHandler? IsWaitingRemoteChangedEventHandler;
 
-        public EventHandler<ACKReceivedEventArgs> ACKReceived;
-        public EventHandler<RSTSReceivedEventArgs> RSTSReceived;
-        public EventHandler<STRSTPReceivedEventArgs> STRSTPReceived;
-        public EventHandler<NDTAReceivedEventArgs> NDTAReceived;
-        public EventHandler<RUCMDReceivedEventArgs> RUCMDReceived;
-        public EventHandler<RBCASTReceivedEventArgs> RBCASTReceived;
-        public EventHandler<CSETReceivedEventArgs> CSETReceived;
+        public EventHandler<ACKReceivedEventArgs>? ACKReceived;
+        public EventHandler<RSTSReceivedEventArgs>? RSTSReceived;
+        public EventHandler<STRSTPReceivedEventArgs>? STRSTPReceived;
+        public EventHandler<NDTAReceivedEventArgs>? NDTAReceived;
+        public EventHandler<RUCMDReceivedEventArgs>? RUCMDReceived;
+        public EventHandler<RBCASTReceivedEventArgs>? RBCASTReceived;
+        public EventHandler<CSETReceivedEventArgs>? CSETReceived;
 
-        public EventHandler DeviceInfoValidChanged;
-
-        #endregion
+        public EventHandler? DeviceInfoValidChanged;
     }
 }

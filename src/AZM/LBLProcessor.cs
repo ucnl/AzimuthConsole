@@ -28,6 +28,11 @@ namespace AzimuthConsole.AZM
         private readonly Dictionary<REMOTE_ADDR_Enum, TimedTOABasePoint> _points = new();
         private TimeSpan _maxAllowedAge = TimeSpan.FromSeconds(10);
 
+        public double RefPointLat { get; set; } = double.NaN;
+        public double RefPointLon { get; set; } = double.NaN;
+
+        public bool IsRefPoint => !double.IsNaN(RefPointLat) && !double.IsNaN(RefPointLon);
+
         public void UpdatePoint(REMOTE_ADDR_Enum id, TOABasePoint point)
         {
             var now = DateTime.UtcNow;

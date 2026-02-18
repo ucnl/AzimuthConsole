@@ -1,6 +1,6 @@
-﻿using System.Globalization;
+﻿using System.Collections.Concurrent;
+using System.Globalization;
 using System.Net;
-using System.Text;
 using UCNLDrivers;
 using UCNLMan;
 using UCNLNav;
@@ -25,9 +25,11 @@ namespace AzimuthConsole.AZM
         }
     }   
 
-    public class AZMCombiner
+    public class AZMCombiner : IDisposable
     {
-        public bool ConnectionActive { get => azmPort != null && azmPort.IsActive; }
+        private bool _disposed = false;
+
+        public bool ConnectionActive => azmPort?.IsActive == true;
 
         bool interrogationActive = false;
         public bool InterrogationActive
@@ -40,7 +42,7 @@ namespace AzimuthConsole.AZM
             }
         }
 
-        public bool AZMDetected { get => azmPort != null && azmPort.Detected; }
+        public bool AZMDetected => azmPort?.Detected == true;
         public string AZMPreferredPortName
         {
             get => azmPort == null ? string.Empty : azmPort.ProposedPortName;
@@ -52,7 +54,7 @@ namespace AzimuthConsole.AZM
         }
 
         public bool IsUseAUX1 { get; private set; }
-        public bool AUX1Detected { get { return (aux1Port != null) && (aux1Port.Detected); } }
+        public bool AUX1Detected => aux1Port?.Detected == true;
 
         string aux1PreferredPortName = string.Empty;
         public string AUX1PreferredPortName
@@ -65,7 +67,7 @@ namespace AzimuthConsole.AZM
         }
 
         public bool IsUseAUX2 { get; private set; }
-        public bool AUX2Detected { get { return (aux2Port != null) && (aux2Port.Detected); } }
+        public bool AUX2Detected => aux2Port?.Detected == true;
 
         string aux2PreferredPortName = string.Empty;
         public string AUX2PreferredPortName
@@ -95,6 +97,11 @@ namespace AzimuthConsole.AZM
         public double LongitudeOverride { get; private set; }
         public double HeadingOverride { get; private set; }
         public bool LocationOverrideEnabled { get => pTimer.Enabled; }
+        
+
+        DHTrackFilterCartesian? lblDHFilter;
+        TrackMovingAverageSmootherCartesian? lblSFilter;
+        double lbl_rerr_threshold_m = 10.0;
 
 
         public bool IsRecalculateRange { get; set; } = true;
@@ -104,29 +111,17 @@ namespace AzimuthConsole.AZM
 
         readonly WPManager wpManager = new();
 
-
         double phi_deg;
         double x_offset_m;
         double y_offset_m;
 
-        AgingValue<double> stPressure_mBar;
-        AgingValue<double> stDepth_m;
-        AgingValue<double> waterTemp_C;
-        AgingValue<double> stPitch_deg;
-        AgingValue<double> stRoll_deg;
+        int usbl_dhfilter_fifo_size = 8;
+        double usbl_dhfilter_maxspeed_mps = 1;
+        double usbl_dhfilter_threshold_m = 5;
+        int usbl_sfilter_fifo_size = 4;
+        double usbl_sfilter_threshold_m = 100;
 
-        AgingValue<double> lat_deg;
-        AgingValue<double> lon_deg;
-        AgingValue<double> course_deg;
-        AgingValue<double> speed_mps;
-        AgingValue<double> heading_deg;
-
-        AgingValue<double> x_m;
-        AgingValue<double> y_m;
-        AgingValue<double> z_m;
-        AgingValue<double> rerr_m;
-
-        List<IAging> stationParams;
+        AZMTranscieverState state;
 
         readonly AZMPort? azmPort;
         uGNSSSerialPort? aux1Port;
@@ -134,7 +129,7 @@ namespace AzimuthConsole.AZM
         NMEASerialPort? serialOutput;
         UDPTranslator? udpOutput;
 
-        Dictionary<REMOTE_ADDR_Enum, ResponderBeacon> remotes;
+        ConcurrentDictionary<REMOTE_ADDR_Enum, ResponderBeacon> remotes;
 
         bool polling_started_received = false;
         DateTime prevRemAckTS = DateTime.Now;
@@ -144,96 +139,153 @@ namespace AzimuthConsole.AZM
 
         readonly LBLProcessor lblProcessor = new();
 
-        public AZMCombiner(ushort addrMask, double salinity_PSU, double maxDist_m, double hdn_adj_deg, double gnss_x_offset_m, double gnss_y_offset_m)
+        public AZMCombiner(SettingsContainer settings)
         {
             DeviceSerialNumber = string.Empty;
             DeviceVersionInfo = string.Empty;
 
+            ValidateMainParameters(settings);
+
+            InitializeFilters(settings);
+
             wpManager.IsAutoSoundSpeed = true;
             wpManager.IsAutoSalinity = false;
-            wpManager.Salinity = salinity_PSU;
+            wpManager.Salinity = Salinity_PSU;
 
-            AddressMask = addrMask;
+            AddressMask = settings.address_mask;
 
-            if ((salinity_PSU >= PHX.PHX_SALINITY_PSU_MIN) && (salinity_PSU <= PHX.PHX_SALINITY_PSU_MAX))
-                Salinity_PSU = salinity_PSU;
-            else
-                throw new ArgumentOutOfRangeException(nameof(salinity_PSU));
+            x_offset_m = settings.antenna_x_offset_m;
+            y_offset_m = settings.antenna_y_offset_m;
 
-            if ((hdn_adj_deg >= 0) && (hdn_adj_deg <= 360))
-                phi_deg = hdn_adj_deg;
-            else
-                throw new ArgumentOutOfRangeException(nameof(hdn_adj_deg));
-
-            if ((maxDist_m >= AZM.ABS_MIN_RANGE_M) && (maxDist_m <= AZM.ABS_MAX_RANGE_M))
-                MaxDist_m = maxDist_m;
-            else
-                throw new ArgumentOutOfRangeException(nameof(maxDist_m));
-
-            x_offset_m = gnss_x_offset_m;
-            y_offset_m = gnss_y_offset_m;
-
-            remotes = [];
-
-            stPressure_mBar = new AgingValue<double>(int.MaxValue, 10, AZM.mBar_fmtr);
-            stPressure_mBar.IgnoreAge = true;
-            stPressure_mBar.Name = nameof(stPressure_mBar);
-
-            stDepth_m = new AgingValue<double>(int.MaxValue, 10, AZM.meters1dec_fmtr);
-            stDepth_m.IgnoreAge = true;
-            stDepth_m.Name = nameof(stDepth_m);
-
-            waterTemp_C = new AgingValue<double>(int.MaxValue, 10, AZM.degC_fmtr);
-            waterTemp_C.IgnoreAge = true;
-            waterTemp_C.Name = nameof(waterTemp_C);
-
-            stPitch_deg = new AgingValue<double>(3, 10, AZM.degrees1dec_fmtr);
-            stPitch_deg.IgnoreAge = true;
-            stPitch_deg.Name = nameof(stPitch_deg);
-
-            stRoll_deg = new AgingValue<double>(int.MaxValue, 10, AZM.degrees1dec_fmtr);
-            stRoll_deg.Name = nameof(stRoll_deg);
-
-            lat_deg = new AgingValue<double>(int.MaxValue, 10, AZM.latlon_fmtr);
-            lat_deg.IgnoreAge = true;
-            lat_deg.Name = nameof(lat_deg);
-            lon_deg = new AgingValue<double>(int.MaxValue, 10, AZM.latlon_fmtr);
-            lon_deg.IgnoreAge = true;
-            lon_deg.Name = nameof(lon_deg);
-            course_deg = new AgingValue<double>(int.MaxValue, 10, AZM.degrees1dec_fmtr);
-            course_deg.IgnoreAge = true;
-            course_deg.Name = nameof(course_deg);
-            speed_mps = new AgingValue<double>(int.MaxValue, 10, x => string.Format(CultureInfo.InvariantCulture, "{0:F01}", x / 3.6));
-            speed_mps.Name = nameof(speed_mps);
-
-            heading_deg = new AgingValue<double>(int.MaxValue, 10, AZM.degrees1dec_fmtr);
-            heading_deg.Name = nameof(heading_deg);
-
-            x_m = new AgingValue<double>(int.MaxValue, 10, AZM.meters3dec_fmtr);
-            x_m.IgnoreAge = true;
-            x_m.Name = nameof(x_m);
-            y_m = new AgingValue<double>(int.MaxValue, 10, AZM.meters3dec_fmtr);
-            y_m.IgnoreAge = true;
-            y_m.Name = nameof(y_m);
-            z_m = new AgingValue<double>(int.MaxValue, 10, AZM.meters3dec_fmtr);
-            z_m.IgnoreAge = true;
-            z_m.Name = nameof(z_m);
-            rerr_m = new AgingValue<double>(int.MaxValue, 10, AZM.meters3dec_fmtr);
-            rerr_m.Name = nameof(rerr_m);
-
-            stationParams = [ stPressure_mBar, stDepth_m, waterTemp_C, 
-                              stPitch_deg, stRoll_deg, lat_deg, lon_deg, course_deg, speed_mps, heading_deg,
-                              x_m, y_m, z_m, rerr_m ];
+            remotes = new ConcurrentDictionary<REMOTE_ADDR_Enum, ResponderBeacon>();
+            state = new AZMTranscieverState();            
 
             azmPort = new AZMPort(BaudRate.baudRate9600)
             {
                 IsTryAlways = true,
                 IsLogIncoming = true
             };
+            SubscribeToEvents();
+            InitializeAuxiliaryConnections(settings);
+
+            if (settings.LBLResponderCoordinatesMode == LBLResponderCoordinatesModeEnum.Cartesian)
+            {
+                Set3RespondersLocalCoordinates(
+                    settings.LBLModeR1Coordinates.X, settings.LBLModeR1Coordinates.Y,
+                    settings.LBLModeR2Coordinates.X, settings.LBLModeR2Coordinates.Y,
+                    settings.LBLModeR3Coordinates.X, settings.LBLModeR3Coordinates.Y);
+            } else if (settings.LBLResponderCoordinatesMode == LBLResponderCoordinatesModeEnum.Geographic)
+            {
+                Set3RespondersGeographicCoordinates(
+                    settings.LBLModeR1Coordinates.X, settings.LBLModeR1Coordinates.Y,
+                    settings.LBLModeR2Coordinates.X, settings.LBLModeR2Coordinates.Y,
+                    settings.LBLModeR3Coordinates.X, settings.LBLModeR3Coordinates.Y);
+            }
+
+
+                pTimer = new System.Timers.Timer
+                {
+                    Interval = 1000,
+                    AutoReset = true
+                };
+            pTimer.Elapsed += (o, e) =>
+            {
+                if (_disposed) return;
+
+                state.Lat_deg.Value = LatitudeOverride;
+                state.Lon_deg.Value = LongitudeOverride;
+                state.Heading_deg.Value = HeadingOverride;
+            };
+        }
+
+
+        private void ValidateMainParameters(SettingsContainer settings)
+        {
+            if (AZM.IsStyPSU(settings.sty_PSU))
+                Salinity_PSU = settings.sty_PSU;
+            else
+                throw new ArgumentOutOfRangeException(nameof(settings.sty_PSU));
+
+            if (AZM.IsHdnDeg(settings.antenna_angular_offset_deg))
+                phi_deg = settings.antenna_angular_offset_deg;
+            else
+                throw new ArgumentOutOfRangeException(nameof(settings.antenna_angular_offset_deg));
+
+            if (AZM.IsMaxDst(settings.max_dist_m))
+                MaxDist_m = settings.max_dist_m;
+            else
+                throw new ArgumentOutOfRangeException(nameof(settings.max_dist_m));
+        }
+
+        private void InitializeFilters(SettingsContainer settings)
+        {
+            if (settings.LBLMode_Use_DHFilter)
+                lblDHFilter = new DHTrackFilterCartesian(
+                    settings.LBLMode_DHFilter_FIFO_Size,
+                    settings.LBLMode_DHFilter_MaxSpeed_mps,
+                    settings.LBLMode_DHFilter_Threshold_m);
+
+            if (settings.LBLMode_Use_SFilter)
+                lblSFilter = new TrackMovingAverageSmootherCartesian(
+                    settings.LBLMode_SFilter_FIFO_Size,
+                    settings.LBLMode_SFilter_Threshold_m);
+
+            usbl_dhfilter_fifo_size = settings.USBLMode_DHFilter_FIFO_Size;
+            usbl_dhfilter_maxspeed_mps = settings.USBLMode_DHFilter_MaxSpeed_mps;
+            usbl_dhfilter_threshold_m = settings.USBLMode_DHFilter_Threshold_m;
+
+            usbl_sfilter_fifo_size = settings.USBLMode_SFilter_FIFO_Size;
+            usbl_sfilter_threshold_m = settings.USBLMode_SFilter_Threshold;
+
+            lbl_rerr_threshold_m = settings.LBLMode_RErr_Threshold_m;
+        }
+
+        private void InitializeAuxiliaryConnections(SettingsContainer settings)
+        {
+            if (settings.aux1Enabled)
+            {
+                AUX1PreferredPortName = settings.aux1PrefPortName;
+                AUX1Init(settings.aux1PortBaudrate);
+            }
+
+            if (settings.aux2Enabled)
+            {
+                AUX2PreferredPortName = settings.aux2PrefPortName;
+                AUX2Init(settings.aux2PortBaudrate);
+            }
+
+            if (settings.outputSerialEnabled)
+            {
+                LogInfo($"Initializing SERIAL_OUT on {settings.outputSerialPortName}...");
+                SerialOutputInit(settings.outputSerialPortName, settings.outputSerialPortBaudrate);
+                OutputHandler += (o, e) => ToSerialOutput(e.Line);
+            }
+
+            if (settings.output_udp_enabled)
+            {
+                LogInfo($"Initializing UDP output UDP_OUT on {settings.output_endpoint}...");
+                UDPOutputInit(settings.output_endpoint);
+                OutputHandler += (o, e) => ToUDPOutput(e.Line);
+            }
+
+            if ((settings.InvidvidualEndpoints != null) && (settings.InvidvidualEndpoints.Count > 0))
+            {
+                foreach (var item in settings.InvidvidualEndpoints)
+                {
+                    LogInfo($"Initializing responder {item.Key} UDP output on {item.Value}...");
+                    SetResponderIndividualUDPChannel(item.Key, item.Value);
+                }
+            }
+        }
+
+        private void SubscribeToEvents()
+        {
+            if (azmPort == null)
+                return;
 
             azmPort.DetectedChanged += (o, e) =>
             {
-                LogEventHandler?.Invoke(o, new LogEventArgs(LogLineType.INFO, string.Format("AZM Detected={0}", azmPort.Detected)));
+                LogInfo($"AZM Detected={azmPort.Detected}");
 
                 if (azmPort.Detected)
                 {
@@ -247,16 +299,15 @@ namespace AzimuthConsole.AZM
             };
             azmPort.DeviceInfoValidChanged += (o, e) =>
             {
-                if (azmPort.IsDeviceInfoValid && 
+                if (azmPort.IsDeviceInfoValid &&
                     ((azmPort.DeviceType == AZM_DEVICE_TYPE_Enum.DT_USBL_TSV) ||
                      (azmPort.DeviceType == AZM_DEVICE_TYPE_Enum.DT_LBL_TSV)))
                 {
-                    LogEventHandler?.Invoke(o, new LogEventArgs(LogLineType.INFO,
-                        string.Format(CultureInfo.InvariantCulture,
+                    LogInfo(string.Format(CultureInfo.InvariantCulture,
                         "Querying to start polling (AddrMask={0}, Salinity={1:F01} PSU, MaxDist={2:F01} m)",
-                        addrMask, salinity_PSU, maxDist_m)));
+                        AddressMask, Salinity_PSU, MaxDist_m));
 
-                    azmPort.Query_BaseStart(addrMask, salinity_PSU, maxDist_m);
+                    azmPort.Query_BaseStart(AddressMask, Salinity_PSU, MaxDist_m);
                     prevRemAckTS = DateTime.Now;
                     polling_started_received = false;
                 }
@@ -265,7 +316,7 @@ namespace AzimuthConsole.AZM
                 {
                     DeviceType = azmPort.DeviceType;
                     DeviceSerialNumber = azmPort.SerialNumber;
-                    DeviceVersionInfo = string.Format("{0} v{1}", azmPort.SystemInfo, azmPort.SystemVersion);
+                    DeviceVersionInfo = $"{azmPort.SystemInfo} v{azmPort.SystemVersion}";
                 }
                 else
                 {
@@ -278,20 +329,19 @@ namespace AzimuthConsole.AZM
             {
                 if ((e.SentenceID == ICs.IC_D2D_STRSTP) && (e.ResultID != IC_RESULT_Enum.IC_RES_OK))
                 {
-                    LogEventHandler?.Invoke(o, new LogEventArgs(LogLineType.ERROR, string.Format("IC_D2D_STRSTP caused a \"{0}\" error, retrying...", e.ResultID)));
-                    LogEventHandler?.Invoke(o, new LogEventArgs(LogLineType.INFO,
-                        string.Format("Querying to start polling (AddrMask={0} ({1}), Salinity={2:F01} PSU, MaxDist={3:F01} m)", 
-                        addrMask,
-                        Convert.ToString(addrMask, 2).PadLeft(16, '0'),
-                        salinity_PSU, 
-                        maxDist_m)));
+                    LogError($"IC_D2D_STRSTP caused a \"{e.ResultID}\" error, retrying...");
+                    LogInfo(string.Format(CultureInfo.InvariantCulture, "Querying to start polling (AddrMask={0} ({1}), Salinity={2:F01} PSU, MaxDist={3:F01} m)",
+                        AddressMask,
+                        Convert.ToString(AddressMask, 2).PadLeft(16, '0'),
+                        Salinity_PSU,
+                        MaxDist_m));
 
-                    azmPort.Query_BaseStart(addrMask, salinity_PSU, maxDist_m);
+                    azmPort.Query_BaseStart(AddressMask, Salinity_PSU, MaxDist_m);
                     prevRemAckTS = DateTime.Now;
                     polling_started_received = false;
                 }
             };
-            azmPort.IsActiveChanged += (o, e) => LogEventHandler?.Invoke(o, new LogEventArgs(LogLineType.INFO, string.Format("Active={0}", azmPort.IsActive)));
+            azmPort.IsActiveChanged += (o, e) => LogInfo($"Active={azmPort.IsActive}");
             azmPort.LogEventHandler += (o, e) => LogEventHandler?.Invoke(o, e);
             azmPort.NDTAReceived += (o, e) =>
             {
@@ -311,7 +361,7 @@ namespace AzimuthConsole.AZM
                     else if (DeviceType == AZM_DEVICE_TYPE_Enum.DT_LBL_TSV)
                     {
                         ProcessRemoteLBL(e);
-                    }                    
+                    }
                     prevRemAckTS = DateTime.Now;
                 }
 
@@ -325,9 +375,8 @@ namespace AzimuthConsole.AZM
                     (DateTime.Now.Subtract(prevRemAckTS).Seconds > 5))
                 {
                     polling_started_received = false;
-                    LogEventHandler?.Invoke(this,
-                        new LogEventArgs(LogLineType.ERROR, "Remote action timeout (Short-term power shutdown?) , restarting polling..."));
-                    azmPort.Query_BaseStart(addrMask, salinity_PSU, maxDist_m);
+                    LogError("Remote action timeout (Short-term power shutdown?) , restarting polling...");                    
+                    azmPort.Query_BaseStart(AddressMask, Salinity_PSU, MaxDist_m);
                 }
 
             };
@@ -337,67 +386,81 @@ namespace AzimuthConsole.AZM
 
                 if (e.AddrMask == 0)
                 {
-                    LogEventHandler?.Invoke(o,
-                        new LogEventArgs(LogLineType.INFO, "Interrogation paused..."));
-
+                    LogInfo("Interrogation paused...");
                     polling_started_received = false;
                 }
                 else
                 {
-                    LogEventHandler?.Invoke(o,
-                        new LogEventArgs(LogLineType.INFO,
-                            string.Format(CultureInfo.InvariantCulture,
-                            "Polling started (AddrMask={0} ({1}), Salinity={2:F01} PSU, SoundSpeed={3}, MaxDist={4:F01} m)",
-                            e.AddrMask,
-                            Convert.ToString(e.AddrMask, 2).PadLeft(16, '0'),
-                            e.Sty_PSU,
-                            double.IsNaN(e.SoundSpeed_mps) ? "Auto" : string.Format(CultureInfo.InvariantCulture, "{0:F01} m/s", e.SoundSpeed_mps),
-                            e.MaxDist_m)));
+                    LogInfo(string.Format(CultureInfo.InvariantCulture,
+                        "Polling started (AddrMask={0} ({1}), Salinity={2:F01} PSU, SoundSpeed={3}, MaxDist={4:F01} m)",
+                        e.AddrMask,
+                        Convert.ToString(e.AddrMask, 2).PadLeft(16, '0'),
+                        e.Sty_PSU,
+                        double.IsNaN(e.SoundSpeed_mps) ? "Auto" : string.Format(CultureInfo.InvariantCulture, "{0:F01} m/s", e.SoundSpeed_mps),
+                        e.MaxDist_m));
 
                     polling_started_received = true;
                     prevRemAckTS = DateTime.Now;
                 }
             };
-            azmPort.RSTSReceived += (o, e) => RSTSReceivedHandler?.Invoke(o, e);           
-
-            pTimer = new System.Timers.Timer
-            {
-                Interval = 1000,
-                AutoReset = true
-            };
-            pTimer.Elapsed += (o, e) =>
-            {
-                lat_deg.Value = LatitudeOverride;
-                lon_deg.Value = LongitudeOverride;
-                heading_deg.Value = HeadingOverride;
-            };
+            azmPort.RSTSReceived += (o, e) => RSTSReceivedHandler?.Invoke(o, e);
         }
+
+
+
+
+        private bool IsAUX1UsedNotNullAndActive() =>
+            IsUseAUX1 && (aux1Port != null) && aux1Port.IsActive;
+
+        private bool IsAUX2UsedNotNullAndActive() =>
+            IsUseAUX2 && (aux2Port != null) && aux2Port.IsActive;
+
+        private bool IsAUX2UsedNotNullAndNotActive() =>
+            IsUseAUX2 && (aux2Port != null) && !aux2Port.IsActive;
+
+        private bool IsSerialOutputUsedNotNullAndNotOpen() =>
+            IsUseSerialOutput && (serialOutput != null) && !serialOutput.IsOpen;
+
+        private bool IsSerialOutputUsedNotNullAndOpen() =>
+            IsUseSerialOutput && (serialOutput != null) && serialOutput.IsOpen;
+        private bool IsAZMPortNotNullAndNotActive() =>
+            (azmPort != null) && !azmPort.IsActive;
+
+        private bool IsAZMPortNotNullAndActive() =>
+            (azmPort != null) && azmPort.IsActive;
+
+        private bool IsStationLocationAndHeadingValid() =>
+            state.Lat_deg.IsInitializedAndNotObsolete &&
+            state.Lon_deg.IsInitializedAndNotObsolete &&
+            state.Heading_deg.IsInitializedAndNotObsolete;
+
+
 
         public bool Connect()
         {
             bool result = true;
 
-            if (IsUseAUX1 && ((aux1Port != null) && aux1Port.IsActive))
-                aux1Port.Stop();
+            if (IsAUX1UsedNotNullAndActive())
+                aux1Port?.Stop();
 
-            if (IsUseAUX2 && ((aux2Port != null) && aux2Port.IsActive))
-                aux2Port.Stop();
+            if (IsAUX2UsedNotNullAndActive())
+                aux2Port?.Stop();
 
-            if (IsUseSerialOutput && serialOutput != null && !serialOutput.IsOpen)
+            if (IsSerialOutputUsedNotNullAndNotOpen())
             {
                 try
                 {
-                    serialOutput.Open();
+                    serialOutput?.Open();
                 }
                 catch (Exception ex)
                 {
-                    LogEventHandler?.Invoke(this, new LogEventArgs(LogLineType.ERROR, ex));
+                    LogError($"Failed to open SERIAL_OUT ({serialOutput?.PortName}): {ex.Message}");
                 }
             }
 
-            if ((azmPort != null) && !azmPort.IsActive)
+            if (IsAZMPortNotNullAndNotActive())
             {
-                azmPort.Start();
+                azmPort?.Start();
                 polling_started_received = false;
             }
 
@@ -408,26 +471,26 @@ namespace AzimuthConsole.AZM
         {
             bool result = true;
 
-            if ((azmPort != null) && azmPort.IsActive)
+            if (IsAZMPortNotNullAndActive())
             {
-                azmPort.Query_BaseStop();
-                azmPort.Stop();
+                azmPort?.Query_BaseStop();
+                azmPort?.Stop();
 
-                if (IsUseAUX1 && ((aux1Port != null) && aux1Port.IsActive))
-                    aux1Port.Stop();
+                if (IsAUX1UsedNotNullAndActive())
+                    aux1Port?.Stop();
 
-                if (IsUseAUX2 && ((aux2Port != null) && aux2Port.IsActive))
-                    aux2Port.Stop();
+                if (IsAUX2UsedNotNullAndActive())
+                    aux2Port?.Stop();
 
-                if (IsUseSerialOutput && serialOutput != null && serialOutput.IsOpen)
+                if (IsSerialOutputUsedNotNullAndOpen())
                 {
                     try
                     {
-                        serialOutput.Close();
+                        serialOutput?.Close();
                     }
                     catch (Exception ex)
                     {
-                        LogEventHandler?.Invoke(this, new LogEventArgs(LogLineType.ERROR, ex));
+                        LogError($"Failed to close SERIAL_OUT ({serialOutput?.PortName}): {ex.Message}");
                     }
                 }
 
@@ -454,27 +517,27 @@ namespace AzimuthConsole.AZM
                 {
                     if (aux1Port.Detected)
                     {
-                        if (IsUseAUX2 && ((aux2Port != null) && !aux2Port.IsActive))
+                        if (IsAUX2UsedNotNullAndNotActive())
                         {
                             aux2Port.ProposedPortName = aux2PreferredPortName;
-                            aux2Port.Start();
+                            aux2Port?.Start();
                         }
                     }
 
                 };
 
-                aux1Port.HeadingUpdated += (o, e) => heading_deg.Value = aux1Port.Heading;
+                aux1Port.HeadingUpdated += (o, e) => state.Heading_deg.Value = aux1Port.Heading;
 
                 aux1Port.LocationUpdated += (o, e) =>
                 {
-                    lat_deg.Value = aux1Port.Latitude;
-                    lon_deg.Value = aux1Port.Longitude;
+                    state.Lat_deg.Value = aux1Port.Latitude;
+                    state.Lon_deg.Value = aux1Port.Longitude;
 
                     if (!double.IsNaN(aux1Port.CourseOverGround))
-                        course_deg.Value = aux1Port.CourseOverGround;
+                        state.Course_deg.Value = aux1Port.CourseOverGround;
 
                     if (!double.IsNaN(aux1Port.GroundSpeed))
-                        speed_mps.Value = aux1Port.GroundSpeed;
+                        state.Speed_mps.Value = aux1Port.GroundSpeed;
                 };
 
                 aux1Port.LogEventHandler += (o, e) => LogEventHandler?.Rise(o, e);
@@ -493,7 +556,7 @@ namespace AzimuthConsole.AZM
                     IsTryAlways = true
                 };
 
-                aux2Port.HeadingUpdated += (o, e) => heading_deg.Value = aux2Port.Heading;
+                aux2Port.HeadingUpdated += (o, e) => state.Heading_deg.Value = aux2Port.Heading;
                 aux2Port.LogEventHandler += (o, e) => LogEventHandler?.Rise(o, e);
             }
         }
@@ -508,7 +571,7 @@ namespace AzimuthConsole.AZM
             }
             catch (Exception ex)
             {
-                LogEventHandler?.Invoke(this, new LogEventArgs(LogLineType.ERROR, ex));
+                LogError($"Failed to init SERIAL_OUT ({portName}): {ex.Message}");
             }
         }
 
@@ -520,23 +583,30 @@ namespace AzimuthConsole.AZM
             }
             catch (Exception ex)
             {
-                LogEventHandler?.Invoke(this, new LogEventArgs(LogLineType.ERROR, ex));
+                LogError($"Failed to init UDP_OUT ({udpoutputEndpoint.Address}:{udpoutputEndpoint.Port}): {ex.Message}");
             }
         }
+
+        public string GetStationParametersToStringFormat()
+        {
+            return state.GetStationParametersToStringFormat();
+        }
+
 
 
         public bool SetResponderIndividualUDPChannel(REMOTE_ADDR_Enum raddr, IPEndPoint rEndPoint)
         {
             bool result = false;
+            var r = remotes.GetOrAdd(raddr, addr => new ResponderBeacon(addr));
 
             try
             {
-                remotes[raddr].InitIUDPOutput(rEndPoint);
+                r.InitIUDPOutput(rEndPoint);
                 result = true;
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-
+                LogError($"Failed to set UDP channel for {raddr}: {ex.Message}");
             }
 
             return result;
@@ -556,13 +626,11 @@ namespace AzimuthConsole.AZM
             try
             {
                 udpOutput?.Send(line);
-                LogEventHandler?.Rise(this,
-                    new LogEventArgs(LogLineType.INFO,
-                    string.Format("{0}:{1} ({2}) << {3}", udpOutput?.Address, udpOutput?.Port, "UDP_OUT", line)));
+                LogInfo($"{udpOutput?.Address}:{udpOutput?.Port} (UDP_OUT) << {line}");
             }
             catch (Exception ex)
             {
-                LogEventHandler?.Invoke(this, new LogEventArgs(LogLineType.ERROR, ex));
+                LogError($"Failed to write to UDP_OUT ({udpOutput?.Address}:{udpOutput?.Port}): {ex.Message}");
             }
         }
 
@@ -571,13 +639,11 @@ namespace AzimuthConsole.AZM
             try
             {
                 serialOutput?.SendData(line);
-                LogEventHandler?.Rise(this,
-                    new LogEventArgs(LogLineType.INFO,
-                    string.Format("{0} ({1}) << {2}", serialOutput?.PortName, "SERIAL_OUT", line)));
+                LogInfo($"{serialOutput?.PortName} (SERIAL_OUT) << {line}");
             }
             catch (Exception ex)
             {
-                LogEventHandler?.Invoke(this, new LogEventArgs(LogLineType.ERROR, ex));
+                LogError($"Failed to write to SERIAL_OUT ({serialOutput?.PortName}): {ex.Message}");
             }
         }
 
@@ -594,7 +660,7 @@ namespace AzimuthConsole.AZM
                 }
                 catch (Exception e)
                 {
-                    LogEventHandler?.Invoke(this, new LogEventArgs(LogLineType.ERROR, e));
+                    LogError($"Failed to pause interrogation: {e.Message}");
                 }
             }
 
@@ -614,7 +680,7 @@ namespace AzimuthConsole.AZM
                 }
                 catch (Exception e)
                 {
-                    LogEventHandler?.Invoke(this, new LogEventArgs(LogLineType.ERROR, e));
+                    LogError($"Failed to resume interrogation: {e.Message}");
                 }
             }
 
@@ -624,6 +690,8 @@ namespace AzimuthConsole.AZM
 
         public bool LocationOverrideEnable(double lt_deg, double ln_deg, double hdn_deg)
         {
+            if (_disposed) return false;
+
             if (pTimer.Enabled)
                 pTimer.Stop();
 
@@ -638,6 +706,8 @@ namespace AzimuthConsole.AZM
 
         public bool LocationOverrideDisable()
         {
+            if (_disposed) return false;
+
             pTimer.Stop();
             return true;
         }
@@ -683,35 +753,20 @@ namespace AzimuthConsole.AZM
 
         private void SetRemoteTimeoutStatus(REMOTE_ADDR_Enum address)
         {
-            if (!remotes.ContainsKey(address))
-                remotes.Add(address, new ResponderBeacon(address));
+           
+            var remote = remotes.GetOrAdd(address, addr => new ResponderBeacon(addr));
 
-            remotes[address].IsTimeout = true;
-            remotes[address].Timeouts++;
+            remote.IsTimeout = true;
+            remote.Timeouts++;
 
-            if (remotes[address].Azimuth_deg.IsInitialized &&
-                remotes[address].SRangeProjection_m.IsInitialized)
+            if (remote.Azimuth_deg.IsInitialized &&
+                remote.SRangeProjection_m.IsInitialized)
             {
-                OutputHandler?.Rise(this, new StringEventArgs(remotes[address].ToString()));
+                OutputHandler?.Rise(this, new StringEventArgs(remote.ToString()));
             }
         }
 
-        private static void CalcAbsLocation(double olat_rad, double olon_rad,
-            double azm_rad, double dst_m,
-            out double rlat_rad, out double rlon_rad, out double razm_rad)
-        {
-            if (!Algorithms.VincentyDirect(olat_rad, olon_rad, azm_rad, dst_m,
-                Algorithms.WGS84Ellipsoid,
-                Algorithms.VNC_DEF_EPSILON, Algorithms.VNC_DEF_IT_LIMIT,
-                out rlat_rad, out rlon_rad, out razm_rad, out _))
-            {
-                Algorithms.HaversineDirect(olat_rad, olon_rad, dst_m, azm_rad,
-                    Algorithms.WGS84Ellipsoid.MajorSemiAxis_m,
-                    out rlat_rad, out rlon_rad);
-
-                razm_rad = Algorithms.Wrap2PI(azm_rad + Math.PI);
-            }
-        }
+        
 
         private void ProcessIUDP(REMOTE_ADDR_Enum raddr)
         {
@@ -727,14 +782,11 @@ namespace AzimuthConsole.AZM
                 }
                 catch (Exception ex)
                 {
-                    LogEventHandler?.Invoke(this, new LogEventArgs(LogLineType.ERROR, ex));
+                    LogError($"Failed to send via IUDP for {raddr}: {ex.Message}");
                 }
 
                 if (sent)
-                    LogEventHandler?.Rise(this,
-                        new LogEventArgs(LogLineType.INFO,
-                        string.Format("{0} (IUDP_{1}) << {2}",
-                        value.UDPEndpointDescription, raddr, nline)));
+                    LogInfo($"{value.UDPEndpointDescription} (IUDP_{raddr}) << {nline}");
             }
         }
 
@@ -761,11 +813,10 @@ namespace AzimuthConsole.AZM
         {
             is_srp = false;
 
-            if (!remotes.ContainsKey(e.Address))
-                remotes.Add(e.Address, new ResponderBeacon(e.Address));
+            var remote = remotes.GetOrAdd(e.Address, addr => new ResponderBeacon(addr));
 
-            remotes[e.Address].IsTimeout = false;
-            remotes[e.Address].SuccededRequests++;
+            remote.IsTimeout = false;
+            remote.SuccededRequests++;
 
             if (AZM.IsUserDataReqCode(e.RequestCode))
             {
@@ -778,35 +829,35 @@ namespace AzimuthConsole.AZM
 
                 if ((rError == CDS_RESP_CODES_Enum.CDS_ERR_BAT_LOW) ||
                     (rError == CDS_RESP_CODES_Enum.CDS_RSYS_STRT))
-                    remotes[e.Address].Message.Value = rError.ToString().Replace("CDS", "").Replace('_', ' ');
+                    remote.Message.Value = rError.ToString().Replace("CDS", "").Replace('_', ' ');
                 else
-                    remotes[e.Address].Message.Value = string.Format("{0} caused {1}", e.RequestCode, rError);
+                    remote.Message.Value = string.Format("{0} caused {1}", e.RequestCode, rError);
 
             }
             else if (e.RequestCode == CDS_REQ_CODES_Enum.CDS_REQ_VCC)
             {
-                remotes[e.Address].VCC_V.Value = (double)(e.ResponseCode) * (AZM.ABS_MAX_VCC_V - AZM.ABS_MIN_VCC_V) / AZM.CRANGE + AZM.ABS_MIN_VCC_V;
+                remote.VCC_V.Value = (double)(e.ResponseCode) * (AZM.ABS_MAX_VCC_V - AZM.ABS_MIN_VCC_V) / AZM.CRANGE + AZM.ABS_MIN_VCC_V;
             }
             else if (e.RequestCode == CDS_REQ_CODES_Enum.CDS_REQ_TMP)
             {
-                remotes[e.Address].WaterTemp_C.Value = (double)(e.ResponseCode) * (AZM.ABS_MAX_TEMP_C - AZM.ABS_MIN_TEMP_C) / AZM.CRANGE + AZM.ABS_MIN_TEMP_C;
+                remote.WaterTemp_C.Value = (double)(e.ResponseCode) * (AZM.ABS_MAX_TEMP_C - AZM.ABS_MIN_TEMP_C) / AZM.CRANGE + AZM.ABS_MIN_TEMP_C;
             }
 
 
             if (!double.IsNaN(e.MSR_dB))
-                remotes[e.Address].MSR_dB.Value = e.MSR_dB;
+                remote.MSR_dB.Value = e.MSR_dB;
 
             if (!double.IsNaN(e.RemotesDepth_m))
             {
-                remotes[e.Address].Depth_m.Value = e.RemotesDepth_m;
-                remotes[e.Address].Z_m.Value = e.RemotesDepth_m;
+                remote.Depth_m.Value = e.RemotesDepth_m;
+                remote.Z_m.Value = e.RemotesDepth_m;
             }
 
             bool ignoreRange = false;
 
             if (!double.IsNaN(e.PropTime_s))
             {
-                remotes[e.Address].PTime_s.Value = e.PropTime_s;
+                remote.PTime_s.Value = e.PropTime_s;
 
                 if (IsRecalculateRange)
                 {
@@ -817,48 +868,44 @@ namespace AzimuthConsole.AZM
                     {
                         if (IsPTimeAdjustment)
                         {
-                            remotes[e.Address].SRange_m.Value = 
+                            remote.SRange_m.Value = 
                                 (e.PropTime_s - PTimePerAddrAdjustment_s  - PTimePerAddrAdjustment2_s * (int)e.Address) * wpManager.SoundSpeed;
                         }
                         else
-                            remotes[e.Address].SRange_m.Value = e.PropTime_s * wpManager.SoundSpeed;
+                            remote.SRange_m.Value = e.PropTime_s * wpManager.SoundSpeed;
                     }
                     else
                     {
-                        remotes[e.Address].SRange_m.Value = e.PropTime_s * wpManager.SoundSpeed;
+                        remote.SRange_m.Value = e.PropTime_s * wpManager.SoundSpeed;
                     }
 
-                    if (stDepth_m.IsInitialized && remotes[e.Address].Depth_m.IsInitialized)
+                    if (state.StDepth_m.IsInitialized && remote.Depth_m.IsInitialized)
                     {
-                        double delta_d_m = Math.Abs(stDepth_m.Value - remotes[e.Address].Depth_m.Value);
-                        if (delta_d_m <= remotes[e.Address].SRange_m.Value)
-                            remotes[e.Address].SRangeProjection_m.Value = 
-                                Math.Sqrt(remotes[e.Address].SRange_m.Value * remotes[e.Address].SRange_m.Value - delta_d_m * delta_d_m);
-                        else
-                            remotes[e.Address].SRangeProjection_m.Value = remotes[e.Address].SRange_m.Value;
+                        remote.SRangeProjection_m.Value =
+                            AZMMath.TryCalculateSlantRangeProjection(state.StDepth_m.Value, remote.Depth_m.Value, remote.SRange_m.Value);                        
                     }
                     else
                     {
-                        remotes[e.Address].SRangeProjection_m.Value = remotes[e.Address].SRange_m.Value;
+                        remote.SRangeProjection_m.Value = remote.SRange_m.Value;
                     }
                 }
             }
 
             if (!ignoreRange && !double.IsNaN(e.SlantRange_m))
-                remotes[e.Address].SRange_m.Value = e.SlantRange_m;
+                remote.SRange_m.Value = e.SlantRange_m;
 
             if (!ignoreRange)
             {
                 if (!double.IsNaN(e.SlantRangeProjection_m))
                 {
-                    remotes[e.Address].SRangeProjection_m.Value = e.SlantRangeProjection_m;
+                    remote.SRangeProjection_m.Value = e.SlantRangeProjection_m;
                     is_srp = true;
                 }
                 else
                 {
                     if (!double.IsNaN(e.SlantRange_m))
                     {
-                        remotes[e.Address].SRangeProjection_m.Value = e.SlantRange_m;
+                        remote.SRangeProjection_m.Value = e.SlantRange_m;
                         is_srp = true;
                     }
                 }
@@ -868,8 +915,7 @@ namespace AzimuthConsole.AZM
 
         private void ProcessRemoteUSBL(NDTAReceivedEventArgs e)
         {
-            if (!remotes.ContainsKey(e.Address))
-                remotes.Add(e.Address, new ResponderBeacon(e.Address));
+            var remote = remotes.GetOrAdd(e.Address, addr => new ResponderBeacon(addr));
 
             bool is_a = false;
 
@@ -877,28 +923,26 @@ namespace AzimuthConsole.AZM
 
             if (!double.IsNaN(e.HAngle_deg))
             {
-                remotes[e.Address].Azimuth_deg.Value = e.HAngle_deg;
+                remote.Azimuth_deg.Value = e.HAngle_deg;
                 is_a = true;
             }
 
             if (!double.IsNaN(e.VAngle_deg))
-                remotes[e.Address].Elevation_deg.Value = e.VAngle_deg;
+                remote.Elevation_deg.Value = e.VAngle_deg;
 
             if (is_a && is_srp)
             {
-                if (lat_deg.IsInitializedAndNotObsolete &&
-                    lon_deg.IsInitializedAndNotObsolete &&
-                    heading_deg.IsInitializedAndNotObsolete)
+                if (IsStationLocationAndHeadingValid())
                 {
-                    PolarCS_ShiftRotate(heading_deg.Value, phi_deg,
-                        remotes[e.Address].Azimuth_deg.Value,
-                        remotes[e.Address].SRangeProjection_m.Value,
+                    AZMMath.PolarCS_ShiftRotate(state.Heading_deg.Value, phi_deg,
+                        remote.Azimuth_deg.Value,
+                        remote.SRangeProjection_m.Value,
                         x_offset_m, y_offset_m,
                         out double a_azm, out double a_rng);
 
-                    CalcAbsLocation(
-                        Algorithms.Deg2Rad(lat_deg.Value),
-                        Algorithms.Deg2Rad(lon_deg.Value),
+                    AZMMath.CalculateAbsLocationDirectGeodetic(
+                        Algorithms.Deg2Rad(state.Lat_deg.Value),
+                        Algorithms.Deg2Rad(state.Lon_deg.Value),
                         Algorithms.Deg2Rad(a_azm), a_rng,
                         out double rlat_rad,
                         out double rlon_rad,
@@ -906,51 +950,86 @@ namespace AzimuthConsole.AZM
 
                     DateTime ts = DateTime.Now;
 
-                    if (remotes[e.Address].DHFilterState == null)
-                        remotes[e.Address].DHFilterState = new DHTrackFilter(8, 1, 5);
+                    remote.DHFilterState ??= 
+                        new DHTrackFilter(usbl_dhfilter_fifo_size, usbl_dhfilter_maxspeed_mps, usbl_dhfilter_threshold_m);
 
-                    if (remotes[e.Address].DHFilterState.Process(rlat_rad, rlon_rad, 0, ts,
+                    if (remote.DHFilterState.Process(rlat_rad, rlon_rad, 0, ts,
                             out rlat_rad, out rlon_rad, out _, out _))
                     {
+                        remote.TFilterState ??= 
+                            new TrackMovingAverageSmoother(usbl_sfilter_fifo_size, usbl_sfilter_threshold_m);
 
-                        if (remotes[e.Address].TFilterState == null)
-                            remotes[e.Address].TFilterState = new TrackMovingAverageSmoother(4, 20);
+                        double rdpt_m = remote.Depth_m.IsInitialized ? remote.Depth_m.Value : 0;
 
-                        double rdpt_m = remotes[e.Address].Depth_m.IsInitialized ? remotes[e.Address].Depth_m.Value : 0;
-
-                        remotes[e.Address].TFilterState?.Process(
+                        remote.TFilterState?.Process(
                             rlat_rad, rlon_rad, rdpt_m, DateTime.Now,
                             out rlat_rad, out rlon_rad, out _, out _);
 
-
-                        remotes[e.Address].AAzimuth_deg.Value = a_azm;
-                        remotes[e.Address].RAzimuth_deg.Value = Algorithms.Wrap360(a_azm + 180);
-                        remotes[e.Address].ADistance_m.Value = a_rng;
+                        remote.AAzimuth_deg.Value = a_azm;
+                        remote.RAzimuth_deg.Value = Algorithms.Wrap360(a_azm + 180);
+                        remote.ADistance_m.Value = a_rng;
 
                         double rlat_deg = Algorithms.Rad2Deg(rlat_rad);
                         double rlon_deg = Algorithms.Rad2Deg(rlon_rad);
 
-                        remotes[e.Address].Lat_deg.Value = rlat_deg;
-                        remotes[e.Address].Lon_deg.Value = rlon_deg;
+                        remote.Lat_deg.Value = rlat_deg;
+                        remote.Lon_deg.Value = rlon_deg;
                     }
                 }
                 else
                 {
-                    remotes[e.Address].RAzimuth_deg.Value = Algorithms.Wrap360(remotes[e.Address].Azimuth_deg.Value + 180);
+                    remote.RAzimuth_deg.Value = Algorithms.Wrap360(remote.Azimuth_deg.Value + 180);
                 }
             }
 
-            OutputHandler?.Rise(this, new StringEventArgs(remotes[e.Address].ToString()));
+            OutputHandler?.Rise(this, new StringEventArgs(remote.ToString()));
         }       
 
-        public bool Set3RespondersGeographicCoordinates(double r1x, double r1y, double r2x, double r2y, double r3x, double r3y)
+        public bool Set3RespondersGeographicCoordinates(double r1lon, double r1lat, double r2lon, double r2lat, double r3lon, double r3lat)
         {
-            throw new NotImplementedException();
+            if (!AZM.IsLonDeg(r1lon) || !AZM.IsLatDeg(r1lat) ||
+                !AZM.IsLonDeg(r2lon) || !AZM.IsLatDeg(r2lat) ||
+                !AZM.IsLonDeg(r3lon) || !AZM.IsLatDeg(r3lat))
+                return false;
+
+            lblProcessor.RefPointLat = r1lat;
+            lblProcessor.RefPointLon = r1lon;
+
+            double rplat_rad = Algorithms.Deg2Rad(r1lat);
+            double rplon_rad = Algorithms.Deg2Rad(r1lon);
+
+            double r1x = 0; double r1y = 0;
+
+            Algorithms.GetDeltasByGeopoints_WGS84(rplat_rad, rplon_rad, Algorithms.Deg2Rad(r2lat), Algorithms.Deg2Rad(r2lon), out double r2x, out double r2y);
+            Algorithms.GetDeltasByGeopoints_WGS84(rplat_rad, rplon_rad, Algorithms.Deg2Rad(r3lat), Algorithms.Deg2Rad(r3lon), out double r3x, out double r3y);
+
+            Set3RespondersLocalCoordinates(r1x, r1y, r2x, r2y, r3x, r3y);
+
+            return true;
         }
 
         public bool Discard3RespondersCoordinates()
         {
-            throw new NotImplementedException();
+            lblProcessor.RefPointLat = double.NaN;
+            lblProcessor.RefPointLon = double.NaN;
+
+            var r1 = remotes.GetOrAdd(REMOTE_ADDR_Enum.REM_ADDR_1, addr => new ResponderBeacon(addr));
+
+            r1.X_m.DeInit();
+            r1.Y_m.DeInit();
+
+            var r2 = remotes.GetOrAdd(REMOTE_ADDR_Enum.REM_ADDR_2, addr => new ResponderBeacon(addr));
+
+            r2.X_m.DeInit();
+            r2.Y_m.DeInit();
+
+            var r3 = remotes.GetOrAdd(REMOTE_ADDR_Enum.REM_ADDR_3, addr => new ResponderBeacon(addr));
+
+            r3.X_m.DeInit();
+            r3.Y_m.DeInit();
+
+
+            return true;
         }
 
         public bool Set3RespondersLocalCoordinates(double r1x, double r1y, double r2x, double r2y, double r3x, double r3y)
@@ -960,52 +1039,48 @@ namespace AzimuthConsole.AZM
                 double.IsNaN(r3x) || double.IsNaN(r3y))
                 return false;
 
-            if (!remotes.ContainsKey(REMOTE_ADDR_Enum.REM_ADDR_1))
-                remotes.Add(REMOTE_ADDR_Enum.REM_ADDR_1, new ResponderBeacon(REMOTE_ADDR_Enum.REM_ADDR_1));
+            var r1 = remotes.GetOrAdd(REMOTE_ADDR_Enum.REM_ADDR_1, addr => new ResponderBeacon(addr));
 
-            remotes[REMOTE_ADDR_Enum.REM_ADDR_1].X_m.Value = r1x;
-            remotes[REMOTE_ADDR_Enum.REM_ADDR_1].Y_m.Value = r1y;
+            r1.X_m.Value = r1x;
+            r1.Y_m.Value = r1y;
 
-            if (!remotes.ContainsKey(REMOTE_ADDR_Enum.REM_ADDR_2))
-                remotes.Add(REMOTE_ADDR_Enum.REM_ADDR_2, new ResponderBeacon(REMOTE_ADDR_Enum.REM_ADDR_2));
+            var r2 = remotes.GetOrAdd(REMOTE_ADDR_Enum.REM_ADDR_2, addr => new ResponderBeacon(addr));
 
-            remotes[REMOTE_ADDR_Enum.REM_ADDR_2].X_m.Value = r2x;
-            remotes[REMOTE_ADDR_Enum.REM_ADDR_2].Y_m.Value = r2y;
+            r2.X_m.Value = r2x;
+            r2.Y_m.Value = r2y;
 
-            if (!remotes.ContainsKey(REMOTE_ADDR_Enum.REM_ADDR_3))
-                remotes.Add(REMOTE_ADDR_Enum.REM_ADDR_3, new ResponderBeacon(REMOTE_ADDR_Enum.REM_ADDR_3));
+            var r3 = remotes.GetOrAdd(REMOTE_ADDR_Enum.REM_ADDR_3, addr => new ResponderBeacon(addr));
 
-            remotes[REMOTE_ADDR_Enum.REM_ADDR_3].X_m.Value = r3x;
-            remotes[REMOTE_ADDR_Enum.REM_ADDR_3].Y_m.Value = r3y;
+            r3.X_m.Value = r3x;
+            r3.Y_m.Value = r3y;
 
             return true;
         }        
 
         private void ProcessRemoteLBL(NDTAReceivedEventArgs e)
         {
-            if (!remotes.ContainsKey(e.Address))
-                remotes.Add(e.Address, new ResponderBeacon(e.Address));
+            var remote = remotes.GetOrAdd(e.Address, addr => new ResponderBeacon(addr));
 
             ProcessCommonItems(e, out bool is_srp);
 
             if (is_srp)
             {
-                if (remotes[e.Address].X_m.IsInitialized &&
-                    remotes[e.Address].Y_m.IsInitialized &&
-                    remotes[e.Address].Z_m.IsInitialized)
+                if (remote.X_m.IsInitialized &&
+                    remote.Y_m.IsInitialized &&
+                    remote.Z_m.IsInitialized)
                 {
                     lblProcessor.UpdatePoint(e.Address,
-                        remotes[e.Address].X_m.Value,
-                        remotes[e.Address].Y_m.Value,
-                        remotes[e.Address].Z_m.Value,
-                        remotes[e.Address].SRangeProjection_m.Value);
+                        remote.X_m.Value,
+                        remote.Y_m.Value,
+                        remote.Z_m.Value,
+                        remote.SRangeProjection_m.Value);
 
                     if (lblProcessor.CanFormNavigationBase())
-                    {                        
+                    {
                         var basepoints = lblProcessor.GetValidPointsForSolver();
 
-                        double x_prev = x_m.IsInitialized ? x_m.Value : double.NaN;
-                        double y_prev = y_m.IsInitialized ? y_m.Value : double.NaN;
+                        double x_prev = state.X_m.IsInitialized ? state.X_m.Value : double.NaN;
+                        double y_prev = state.Y_m.IsInitialized ? state.Y_m.Value : double.NaN;
 
                         if (double.IsNaN(x_prev) || double.IsNaN(y_prev))
                         {
@@ -1022,175 +1097,95 @@ namespace AzimuthConsole.AZM
                             y_prev /= basepoints.Count();
                         }
 
-                        Algorithms.TOA_NLM2D_Solve(basepoints.ToArray(), x_prev, y_prev, z_m.Value,
+                        Algorithms.TOA_NLM2D_Solve(basepoints.ToArray(), x_prev, y_prev, state.Z_m.Value,
                             Algorithms.NLM_DEF_IT_LIMIT, Algorithms.NLM_DEF_PREC_THRLD, 1.0,
                             out double x_curr, out double y_curr, out double rerr, out int itcnt);
 
-                        x_m.Value = x_curr;
-                        y_m.Value = y_curr;
-                        rerr_m.Value = rerr;
+                        if (rerr <= lbl_rerr_threshold_m)
+                        {
+                            double res_x = x_curr;
+                            double res_y = y_curr;
+                            double res_z = state.Z_m.Value;
 
+                            bool point_accepted = true;
+
+                            if (lblDHFilter != null)
+                            {
+                                if (lblDHFilter.Process(
+                                    res_x, res_y, res_z, DateTime.Now, 
+                                    out res_x, out res_y, out _, out _))
+                                {
+                                    lblSFilter?.Process(res_x, res_y, res_z, DateTime.Now,
+                                        out res_x, out res_y, out _, out _);
+                                }
+                                else
+                                {
+                                    point_accepted = false;
+                                }
+                            }
+
+                            if (point_accepted)
+                            {
+                                state.X_m.Value = res_x;
+                                state.Y_m.Value = res_y;
+                                state.Rerr_m.Value = rerr;
+
+                                if (lblProcessor.IsRefPoint)
+                                {
+                                    Algorithms.GeopointOffsetByDeltas_WGS84(
+                                        Algorithms.Deg2Rad(lblProcessor.RefPointLat), Algorithms.Deg2Rad(lblProcessor.RefPointLon),
+                                        res_y, res_x, out double lat_rad, out double lon_rad);
+
+                                    state.Lat_deg.Value = Algorithms.Rad2Deg(lat_rad);
+                                    state.Lon_deg.Value = Algorithms.Rad2Deg(lon_rad);
+                                }
+                            }
+                        }
                     }
                 }
             }
             
-            OutputHandler?.Rise(this, new StringEventArgs(remotes[e.Address].ToString()));
+            OutputHandler?.Rise(this, new StringEventArgs(remote.ToString()));
         }
-
-
-        /// <summary>
-        /// All angles clockwise from the North direction
-        /// </summary>
-        /// <param name="heading_deg">Compass reading, 0-360° clockwise from North direction</param>
-        /// <param name="phi_deg">Antenna - comрass zero directions difference, °</param>
-        /// <param name="bearing_deg">Bearing to a responder, 0-360° clockwise from North direction</param>
-        /// <param name="r_m">slant range projection, m</param>
-        /// <param name="xt">transversal GNSS/antenna offset</param>
-        /// <param name="yt">longitudal GNSS/antenna offset</param>
-        /// <param name="a_deg">Absolute azimuth to the responder</param>
-        /// <param name="r_a">Range to the responder (from the GNSS position)</param>
-        private static void PolarCS_ShiftRotate(double heading_deg, double phi_deg, double bearing_deg,
-            double r_m, double xt, double yt,
-            out double a_deg, out double r_a)
-        {
-            double teta = Algorithms.Wrap2PI(Algorithms.Deg2Rad(bearing_deg + phi_deg));
-
-            double xr = xt + r_m * Math.Sin(teta);
-            double yr = yt + r_m * Math.Cos(teta);
-
-            r_a = Math.Sqrt(xr * xr + yr * yr);
-
-            double a_r = Math.Atan2(xr, yr);
-            if (a_r < 0)
-                a_r += 2 * Math.PI;
-
-            a_r += Algorithms.Deg2Rad(heading_deg);
-            a_r = Algorithms.Wrap2PI(a_r);
-
-            a_deg = Algorithms.Rad2Deg(a_r);
-        }
-
-
-        public string GetStationParametersToStringFormat()
-        {
-            StringBuilder sb = new();
-
-            sb.Append("@AZMLOC,");
-
-            foreach (IAging avalue in stationParams)
-            {
-                Utils.AppendAgingValueDesciption(sb, avalue);
-            }
-
-            return sb.ToString();
-        }
-
-        private string StationParametersToString()
-        {
-            StringBuilder sb = new();
-
-            sb.Append("@AZMLOC,");
-
-            foreach (IAging avalue in stationParams)
-            {
-                Utils.AppendAgingValue(sb, avalue);
-            }
-
-            return sb.ToString();
-        }
-
-        private string BuildNMEAOutput()
-        {
-            StringBuilder sb = new();
-
-            var ltCardinal = lat_deg.IsInitializedAndNotObsolete ? (lat_deg.Value > 0 ? "N" : "S") : string.Empty;
-            var lnCardinal = lon_deg.IsInitializedAndNotObsolete ? (lon_deg.Value > 0 ? "E" : "W") : string.Empty;
-
-            bool location_valid = lat_deg.IsInitializedAndNotObsolete && lon_deg.IsInitializedAndNotObsolete;
-
-            sb.Append(
-                NMEAParser.BuildSentence(
-                    TalkerIdentifiers.GN,
-                    SentenceIdentifiers.RMC,
-                    [
-                        DateTime.UtcNow,
-                        location_valid ? "Valid" : "Invalid",
-                        location_valid ? lat_deg.Value : null, ltCardinal,
-                        location_valid ? lon_deg.Value : null, lnCardinal,
-                        null,
-                        null,
-                        DateTime.UtcNow,
-                        null,
-                        null,
-                        location_valid ? "A" : "V",
-                    ]));
-
-            sb.Append(
-                NMEAParser.BuildSentence(
-                    TalkerIdentifiers.GN,
-                    SentenceIdentifiers.GGA,
-                    [
-                        DateTime.UtcNow,
-                        location_valid ? lat_deg.Value : null, ltCardinal,
-                        location_valid ? lon_deg.Value : null, lnCardinal,
-                        "GPS fix",
-                        4,
-                        null,
-                        stDepth_m.IsInitializedAndNotObsolete ? -stDepth_m.Value : null,
-                        "M",
-                        null,
-                        "M",
-                        null,
-                        null,
-                    ]));
-
-            sb.Append(
-                NMEAParser.BuildSentence(
-                    TalkerIdentifiers.GN,
-                    SentenceIdentifiers.MTW,
-                    [
-                        waterTemp_C.IsInitializedAndNotObsolete ? waterTemp_C.Value : null,
-                    ]));
-
-            return sb.ToString();
-        }
-
+        
         private void ProcessStationLocalParameters(NDTAReceivedEventArgs e)
         {
             if (!double.IsNaN(e.LocTemp_C))
             {
-                waterTemp_C.Value = e.LocTemp_C;
+                state.WaterTemp_C.Value = e.LocTemp_C;
                 wpManager.Temperature = e.LocTemp_C;
             }
 
             if (!double.IsNaN(e.LocPrs_mBar))
             {
-                stPressure_mBar.Value = e.LocPrs_mBar;
+                state.StPressure_mBar.Value = e.LocPrs_mBar;
                 wpManager.Pressure = e.LocPrs_mBar;
 
-                if (waterTemp_C.IsInitialized)
+                if (state.WaterTemp_C.IsInitialized)
                 {
                     double waterDensity_kgm3 =
-                        PHX.Water_density_calc(waterTemp_C.Value,
+                        PHX.Water_density_calc(state.WaterTemp_C.Value,
                                                e.LocPrs_mBar,
                                                Salinity_PSU);
 
-                    stDepth_m.Value = PHX.Depth_by_pressure_calc(e.LocPrs_mBar,
-                        PHX.PHX_ATM_PRESSURE_MBAR, waterDensity_kgm3, PHX.PHX_GRAVITY_ACC_MPS2);                    
+                    state.StDepth_m.Value = PHX.Depth_by_pressure_calc(e.LocPrs_mBar,
+                        PHX.PHX_ATM_PRESSURE_MBAR, waterDensity_kgm3, PHX.PHX_GRAVITY_ACC_MPS2);
 
-                    z_m.Value = stDepth_m.Value;
+                    state.Z_m.Value = state.StDepth_m.Value;
                 }
             }
 
             if (!double.IsNaN(e.LocPitch_deg))
-                stPitch_deg.Value = e.LocPitch_deg;
+                state.StPitch_deg.Value = e.LocPitch_deg;
             if (!double.IsNaN(e.LocRoll_deg))
-                stRoll_deg.Value = e.LocRoll_deg;
+                state.StRoll_deg.Value = e.LocRoll_deg;
 
-            OutputHandler?.Rise(this, new StringEventArgs(StationParametersToString()));
+            OutputHandler?.Rise(this, new StringEventArgs(state.StationParametersToString()));
 
             if (IsStationNMEAOutputEnabled)
-                OutputHandler?.Rise(this, new StringEventArgs(BuildNMEAOutput()));
+                OutputHandler?.Rise(this, 
+                    new StringEventArgs(
+                        Utils.BuildRMCGGAMTWNMEAMessages(state.Lat_deg, state.Lon_deg, DateTime.UtcNow, state.StDepth_m, state.WaterTemp_C)));
         }
 
         public void Emulate(string eString)
@@ -1212,6 +1207,33 @@ namespace AzimuthConsole.AZM
                     azmPort?.EmulateInput(splits[2]);
                 }
             }
+        }
+
+
+        private void LogError(string message, Exception? ex = null)
+        {
+            LogEventHandler?.Invoke(this, new LogEventArgs(LogLineType.ERROR, ex ?? new Exception(message)));
+        }
+
+        private void LogInfo(string message)
+        {
+            LogEventHandler?.Invoke(this, new LogEventArgs(LogLineType.INFO, message));
+        }
+
+        public void Dispose()
+        {
+            if (_disposed) return;
+            
+            pTimer?.Stop();
+            pTimer?.Dispose();
+
+            azmPort?.Dispose();
+            aux1Port?.Dispose();
+            aux2Port?.Dispose();
+            serialOutput?.Dispose();
+            udpOutput?.Dispose();
+
+            _disposed = true;
         }
 
         public EventHandler<LogEventArgs>? LogEventHandler;
