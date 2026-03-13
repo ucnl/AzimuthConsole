@@ -15,8 +15,8 @@
 	<AssemblyVersion>1.0.0.0</AssemblyVersion>
 	<FileVersion>1.0.0.0</FileVersion>
 	<MajorVersion>1</MajorVersion>
-	<MinorVersion>0</MinorVersion>
-	<PatchVersion>5</PatchVersion>	
+	<MinorVersion>1</MinorVersion>
+	<PatchVersion>0</PatchVersion>	
 	<BuildNumber Condition=" '$(BuildNumber)' == '' ">$([System.DateTime]::Now.ToString("HHmm"))</BuildNumber>
 	<Version>$(MajorVersion).$(MinorVersion).$(PatchVersion).$(BuildNumber)</Version>
   </PropertyGroup>
@@ -24,6 +24,12 @@
   <ItemGroup>
     <PackageReference Include="System.IO.Ports" Version="9.0.7" />
   </ItemGroup>
+
+<ItemGroup>
+	<EmbeddedResource Include="wwwroot\**">
+		<LogicalName>AzimuthConsole.wwwroot.%(RecursiveDir)%(Filename)%(Extension)</LogicalName>
+	</EmbeddedResource>
+</ItemGroup>
 
   <ItemGroup>
     <Reference Include="UCNLDrivers">
@@ -44,6 +50,29 @@
     <Reference Include="UCNLSalinity">
       <HintPath>..\UCNLSalinity\bin\Release\net8.0\UCNLSalinity.dll</HintPath>
     </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Update="wwwroot\i18n.js">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </EmbeddedResource>
+    <EmbeddedResource Update="wwwroot\index.html">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </EmbeddedResource>
+    <EmbeddedResource Update="wwwroot\script.js">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </EmbeddedResource>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="wwwroot\index.html">
+      <Generator>ResXFileCodeGenerator</Generator>
+      <LastGenOutput>index.Designer.cs</LastGenOutput>
+    </None>
+    <None Update="wwwroot\script.js">
+      <Generator>ResXFileCodeGenerator</Generator>
+      <LastGenOutput>script.Designer.cs</LastGenOutput>
+    </None>
   </ItemGroup>
 
 </Project>

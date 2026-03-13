@@ -22,6 +22,7 @@ namespace AzimuthConsole
         public BaudRate azmPortBaudrate = BaudRate.baudRate9600;
 
         public bool aux1Enabled = false;
+        public bool aux1Alternative = false;
         public string aux1PrefPortName = string.Empty;
         public BaudRate aux1PortBaudrate  = BaudRate.baudRate9600;
 
@@ -60,16 +61,18 @@ namespace AzimuthConsole
         public (double X, double Y) LBLModeR2Coordinates = (double.NaN, double.NaN);
         public (double X, double Y) LBLModeR3Coordinates = (double.NaN, double.NaN);
 
-        public double LBLMode_RErr_Threshold_m = 10.0;
+        public double LBLMode_RErr_Threshold_m = 25.0;
         public bool LBLMode_Use_DHFilter = false;
         public double LBLMode_DHFilter_MaxSpeed_mps = 1.0;
         public double LBLMode_DHFilter_Threshold_m = 5.0;
         public int LBLMode_DHFilter_FIFO_Size = 8;
         public bool LBLMode_Use_SFilter = false;
-        public double LBLMode_SFilter_Threshold_m = 20.0;
+        public double LBLMode_SFilter_Threshold_m = 30.0;
         public int LBLMode_SFilter_FIFO_Size = 4;
 
         public Dictionary<REMOTE_ADDR_Enum, IPEndPoint> InvidvidualEndpoints = new();
+
+        public bool webServerEnabled = true;
 
         #endregion
 
@@ -120,7 +123,7 @@ namespace AzimuthConsole
             LBLModeR2Coordinates = (double.NaN, double.NaN);
             LBLModeR3Coordinates = (double.NaN, double.NaN);
             
-            LBLMode_RErr_Threshold_m = 10.0;
+            LBLMode_RErr_Threshold_m = 25.0;
             LBLMode_Use_DHFilter = false;
             LBLMode_DHFilter_MaxSpeed_mps = 1.0;
             LBLMode_DHFilter_Threshold_m = 5.0;
@@ -128,6 +131,8 @@ namespace AzimuthConsole
             LBLMode_Use_SFilter = false;
             LBLMode_SFilter_Threshold_m = 20.0;
             LBLMode_SFilter_FIFO_Size = 4;
+
+            webServerEnabled = true;
         }       
 
         #endregion

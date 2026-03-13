@@ -31,12 +31,14 @@ namespace AzimuthConsole
         public void RegisterCommandLineCommands(SettingsContainer settings, CmdProcessor proc, AZMCombiner combiner) 
         {
             RegisterSettingsMainCommand(settings, proc);
+            RegisterAUX1AlternativeCommand(settings, proc);
             RegisterSettingsAuxilary(settings, proc);
             RegisterSettingsOutput(settings, proc);
             RegisterSetAntennaRelativePosition(settings, proc);
             RegisterSet3RespondersCoordinatesCommand(settings, proc, combiner);
             RegisterSetResponderIndividualUDPOutput(settings, proc, combiner);
-            RegisterConfigureFiltersCommand(settings, proc);            
+            RegisterConfigureFiltersCommand(settings, proc);
+            RegisterWebServerManagementCommand(settings, proc);
         }
 
         public void RegisterRCTRLCommands(SettingsContainer settings, CmdProcessor proc, AZMCombiner combiner)
@@ -61,7 +63,24 @@ namespace AzimuthConsole
             RegisterSet3RespondersCoordinatesCommand(settings, proc, combiner);
         }
 
+        private void RegisterWebServerManagementCommand(SettingsContainer settings, CmdProcessor proc)
+        {
+            proc.AddCommand("WEBS", "c--c", args =>
+            {
+                var str = ((string)args[0]).ToUpper();
+                bool result = true;
 
+                if (str == "ON")
+                    settings.webServerEnabled = true;
+                else if (str == "OFF")
+                    settings.webServerEnabled = false;
+                else
+                    result = false;
+
+                return result;
+                
+            }, "Built-in web server on/off. Usage: WEBS,on|off");
+        }
         private void RegisterShowSettingsCommand(SettingsContainer settings, CmdProcessor proc)
         {
             proc.AddCommand("SETS?", "", args =>
@@ -71,6 +90,14 @@ namespace AzimuthConsole
             }, "Shows application settings.");
         }
 
+        private void RegisterAUX1AlternativeCommand(SettingsContainer settings, CmdProcessor proc)
+        {
+            proc.AddCommand("AUX1A", "", args =>
+            {
+                settings.aux1Alternative = true;
+                return true;
+            }, "Use this command to turn the alternative mode for AUX1 source.");
+        }
 
         private void RegisterConfigureFiltersCommand(SettingsContainer settings, CmdProcessor proc)
         {

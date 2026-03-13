@@ -1,6 +1,7 @@
 ﻿
 using AzimuthConsole;
 using AzimuthConsole.AZM;
+using AzimuthConsole.Web;
 using System.Text;
 using UCNLDrivers;
 
@@ -13,6 +14,9 @@ internal class Program
         Disabled,
         Invalid
     }
+
+    private static WebServer? webServer;
+    private static DateTime lastWebUpdate = DateTime.Now;
 
     private static async Task Main(string[] args)
     {
@@ -27,8 +31,9 @@ internal class Program
         UDPTranslator? rctrl_udp_translator = null;
         AZMCombiner? azmCombiner = null;
         ConsoleInputProcessor inputProcessor = new();
-        CmdRegistrar registrar = new();        
-
+        CmdRegistrar registrar = new();
+        WebDataConverter? webDataConverter = null;
+        
         var logFileName = StrUtils.GetTimeDirTreeFileName(DateTime.Now, AppContext.BaseDirectory, "log", "log", true);
 
         logger = new TSLogProvider(logFileName);
@@ -165,6 +170,36 @@ internal class Program
         Console.WriteLine();
         Console.WriteLine(inputProcessor.GetHotkeysDescription());
 
+
+        if (settings.webServerEnabled)
+        {
+            try
+            {
+                webServer = new WebServer(8080);
+                webServer.LogEventHandler += (o, e) =>
+                {
+                    if (consoleLogOption == ConsoleLogOptions.Errors_only)
+                    {
+                        if (e.EventType == LogLineType.INFO)
+                            logger.WriteSilent($"{e.EventType}: {e.LogString}");
+                        else
+                            logger.Write($"{e.EventType}: {e.LogString}");
+                    }
+                    else if (consoleLogOption == ConsoleLogOptions.Enabled)
+                    {
+                        logger.Write($"{e.EventType}: {e.LogString}");
+                    }
+                };
+
+                webServer.Start();
+                logger.Write("Web interface available at http://localhost:8080");
+            }
+            catch (Exception ex)
+            {
+                logger.Write($"Failed to start web server: {ex.Message}");
+            }
+        }
+
         if (settings.rctrl_enabled)
         {            
             logger.Write($"Initializing UDP remote control output RCTRL_OUT on {settings.rctrl_out_endpoint}...");
@@ -194,8 +229,25 @@ internal class Program
         }
 
         azmCombiner = new AZMCombiner(settings);
+
+        if (settings.webServerEnabled)
+            webDataConverter = new WebDataConverter(azmCombiner);
+
         azmCombiner.AZMPreferredPortName = settings.azmPrefPortName;
-        azmCombiner.OutputHandler += (o, e) => logger.WriteSilent($"<< {e.Line}");
+        azmCombiner.OutputHandler += (o, e) =>
+        {
+            logger.WriteSilent($"<< {e.Line}");
+
+            if (settings.webServerEnabled)
+            {
+                if ((webDataConverter != null) && (webServer != null && (DateTime.Now - lastWebUpdate).TotalMilliseconds > 100))
+                {
+                    var webData = webDataConverter.ConvertToWebData(e.Line);
+                    webServer.UpdateData(webData);
+                    lastWebUpdate = DateTime.Now;
+                }
+            }
+        };
         azmCombiner.LogEventHandler += (o, e) =>
         {
             if (consoleLogOption == ConsoleLogOptions.Errors_only)
@@ -235,6 +287,9 @@ internal class Program
 
         azmCombiner?.Disconnect();
         azmCombiner?.Dispose();
+
+        webServer?.Stop();
+        webServer?.Dispose();
 
         logger.Flush();
         logger.FinishLog();
