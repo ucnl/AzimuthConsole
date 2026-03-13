@@ -121,15 +121,17 @@ namespace AzimuthConsole.AZM
         int usbl_sfilter_fifo_size = 4;
         double usbl_sfilter_threshold_m = 100;
 
-        AZMTranscieverState state;
+        public AZMTranscieverState state;
+
+
 
         readonly AZMPort? azmPort;
-        uGNSSSerialPort? aux1Port;
+        GNSSWrapper? aux1Port;
         uMagneticCompassPort? aux2Port;
         NMEASerialPort? serialOutput;
         UDPTranslator? udpOutput;
 
-        ConcurrentDictionary<REMOTE_ADDR_Enum, ResponderBeacon> remotes;
+        public ConcurrentDictionary<REMOTE_ADDR_Enum, ResponderBeacon> remotes;
 
         bool polling_started_received = false;
         DateTime prevRemAckTS = DateTime.Now;
@@ -183,11 +185,12 @@ namespace AzimuthConsole.AZM
             }
 
 
-                pTimer = new System.Timers.Timer
-                {
-                    Interval = 1000,
-                    AutoReset = true
-                };
+            pTimer = new System.Timers.Timer
+            {
+                Interval = 1000,
+                AutoReset = true
+            };
+
             pTimer.Elapsed += (o, e) =>
             {
                 if (_disposed) return;
@@ -197,7 +200,6 @@ namespace AzimuthConsole.AZM
                 state.Heading_deg.Value = HeadingOverride;
             };
         }
-
 
         private void ValidateMainParameters(SettingsContainer settings)
         {
@@ -245,7 +247,7 @@ namespace AzimuthConsole.AZM
             if (settings.aux1Enabled)
             {
                 AUX1PreferredPortName = settings.aux1PrefPortName;
-                AUX1Init(settings.aux1PortBaudrate);
+                AUX1Init(settings.aux1PortBaudrate, settings.aux1Alternative);
             }
 
             if (settings.aux2Enabled)
@@ -500,13 +502,13 @@ namespace AzimuthConsole.AZM
         }
 
 
-        public void AUX1Init(BaudRate baudrate)
+        public void AUX1Init(BaudRate baudrate, bool alternative = false)
         {
             if (!IsUseAUX1)
             {
                 IsUseAUX1 = true;
 
-                aux1Port = new uGNSSSerialPort(baudrate)
+                aux1Port = new GNSSWrapper(baudrate, alternative)
                 {
                     IsLogIncoming = true,
                     IsTryAlways = true,
@@ -1199,6 +1201,13 @@ namespace AzimuthConsole.AZM
                 {
                     if (aux1Port == null)
                         AUX1Init(BaudRate.baudRate9600);
+
+                    aux1Port?.EmulateInput(splits[2]);
+                }
+                else if (splits[1] == "(BPS)")
+                {
+                    if (aux1Port == null)
+                        AUX1Init(BaudRate.baudRate9600, true);
 
                     aux1Port?.EmulateInput(splits[2]);
                 }
