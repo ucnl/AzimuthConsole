@@ -1,16 +1,27 @@
-using AzimuthConsole.AZM;
+﻿using AZMLib;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using UCNLNav;
 
 namespace AzimuthConsole.Web
 {
+    public class CalibrationWebStatus
+    {
+        public bool IsAvailable { get; set; }
+        public string State { get; set; } = "Idle";
+        public double CurrentAngle { get; set; }
+        public int CollectedPoints { get; set; }
+        public int TotalPoints { get; set; }
+        public string LastError { get; set; } = "";
+    }
+
     /// <summary>
     /// Сервис для преобразования данных AZMCombiner в формат для веб-интерфейса
     /// </summary>
     public class WebDataConverter
     {
         private readonly AZMCombiner _combiner;
+        private CalibrationManager? _calibrationManager;
         private readonly JsonSerializerOptions _jsonOptions;
 
         public WebDataConverter(AZMCombiner combiner)
@@ -23,6 +34,26 @@ namespace AzimuthConsole.Web
                 DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
                 Converters = { new SafeDoubleJsonConverter() },
                 WriteIndented = false
+            };
+        }
+        
+        public void SetCalibrationManager(CalibrationManager? manager)
+        {
+            _calibrationManager = manager;
+        }
+
+        public CalibrationWebStatus GetCalibrationStatus()
+        {
+            if (_calibrationManager == null)
+                return new CalibrationWebStatus { IsAvailable = false };
+
+            return new CalibrationWebStatus
+            {
+                IsAvailable = true,
+                State = _calibrationManager.State.ToString(),
+                CurrentAngle = _calibrationManager.CurrentRotatorAngle,
+                CollectedPoints = _calibrationManager.CalibrationPairs.Count,
+                TotalPoints = (int)(360.0 / _calibrationManager.StepAngle_deg)
             };
         }
 
@@ -58,6 +89,8 @@ namespace AzimuthConsole.Web
 
                 // Системная информация
                 ConvertSystemInfo(data);
+
+                data.Calibration = GetCalibrationStatus();
 
                 // Добавляем последний лог
                 if (!string.IsNullOrEmpty(lastLine))
@@ -230,13 +263,14 @@ namespace AzimuthConsole.Web
                 // Возраст данных
                 beaconInfo.DataAge = GetMaxAge(beacon);
 
-                // Добавляем только если есть координаты
+                /* // Добавляем только если есть координаты
                 if (beaconInfo.X != null || beaconInfo.Y != null ||
                     beaconInfo.Latitude != null || beaconInfo.Longitude != null ||
                     beaconInfo.Distance != null)
                 {
+                */
                     data.Beacons.Add(beaconInfo);
-                }
+                /*}*/
             }
         }
 
@@ -278,17 +312,55 @@ namespace AzimuthConsole.Web
 
         private double? GetMaxAge(ResponderBeacon beacon)
         {
-            var ages = new List<double>();
+            var now = DateTime.Now;
 
-            AddAgeIfValid(ages, beacon.SRangeProjection_m);
-            AddAgeIfValid(ages, beacon.Azimuth_deg);
-            AddAgeIfValid(ages, beacon.Lat_deg);
-            AddAgeIfValid(ages, beacon.Lon_deg);
-            AddAgeIfValid(ages, beacon.Depth_m);
-            AddAgeIfValid(ages, beacon.MSR_dB);
-            AddAgeIfValid(ages, beacon.VCC_V);
+            // Приоритет 1: MSR — обновляется при ЛЮБОМ ответе маяка (даже если это боковой лепесток)
+            if (beacon.MSR_dB != null && beacon.MSR_dB.IsInitialized)
+            {
+                return Math.Round((now - beacon.MSR_dB.TimeStamp).TotalSeconds, 1);
+            }
 
-            return ages.Count > 0 ? Math.Round(ages.Min(), 1) : (double?)null;
+            // Приоритет 2: PropagationTime — время распространения (тоже при любом ответе)
+            if (beacon.PTime_s != null && beacon.PTime_s.IsInitialized)
+            {
+                return Math.Round((now - beacon.PTime_s.TimeStamp).TotalSeconds, 1);
+            }
+
+            // Приоритет 3: Distance — вычисляется из времени
+            if (beacon.SRangeProjection_m != null && beacon.SRangeProjection_m.IsInitialized)
+            {
+                return Math.Round((now - beacon.SRangeProjection_m.TimeStamp).TotalSeconds, 1);
+            }
+
+            // Приоритет 4: Azimuth
+            if (beacon.Azimuth_deg != null && beacon.Azimuth_deg.IsInitialized)
+            {
+                return Math.Round((now - beacon.Azimuth_deg.TimeStamp).TotalSeconds, 1);
+            }
+
+            // Приоритет 5: Любое другое инициализированное поле
+            double? maxAge = null;
+
+            void CheckAge<T>(AgingValue<T> value) where T : struct
+            {
+                if (value != null && value.IsInitialized)
+                {
+                    var age = (now - value.TimeStamp).TotalSeconds;
+                    if (maxAge == null || age > maxAge)
+                        maxAge = age;
+                }
+            }
+
+            CheckAge(beacon.Lat_deg);
+            CheckAge(beacon.Lon_deg);
+            CheckAge(beacon.X_m);
+            CheckAge(beacon.Y_m);
+            CheckAge(beacon.Z_m);
+            CheckAge(beacon.Depth_m);
+            CheckAge(beacon.VCC_V);
+            CheckAge(beacon.WaterTemp_C);
+
+            return maxAge.HasValue ? Math.Round(maxAge.Value, 1) : (double?)null;
         }
 
         private void AddAgeIfValid(List<double> ages, AgingValue<double> value)
