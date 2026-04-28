@@ -1,7 +1,8 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html>
 <head>
 	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 	<title>🐙 AzimuthConsole Monitor</title>
 	<style>
 		* {
@@ -120,7 +121,7 @@
 
 			#auto-scale-btn.off {
 				background: #4a90e2;
-			}		
+			}
 
 		/* Статус соединения */
 		#connection-status {
@@ -148,15 +149,115 @@
 			left: 20px;
 			background: rgba(0,0,0,0.7);
 			color: white;
-			padding: 12px;
+			padding: 8px 10px;
 			border-radius: 8px;
-			font-size: 12px;
+			font-size: 11px;
 			z-index: 1000;
 			backdrop-filter: blur(5px);
 			border: 1px solid #4a90e2;
-			min-width: 220px;
+			min-width: 160px;
+			max-width: 200px;
+			line-height: 1.4;
+			cursor: pointer;
+			user-select: none;
+			transition: all 0.2s;
+		}
+
+			#system-info:hover {
+				background: rgba(0,0,0,0.8);
+			}
+
+			/* Компактный режим (по умолчанию на мобильных) */
+			#system-info.compact .sys-detail {
+				display: none;
+			}
+
+			#system-info.compact .sys-section {
+				display: none;
+			}
+
+			#system-info .sys-expand-hint {
+				display: none;
+				text-align: center;
+				margin-top: 5px;
+				font-size: 9px;
+				color: #4a90e2;
+				border-top: 1px solid rgba(74,144,226,0.3);
+				padding-top: 4px;
+			}
+
+			#system-info.compact .sys-expand-hint {
+				display: block;
+			}
+
+		/* Панель калибровки на карте */
+		#calibration-panel {
+			position: absolute;
+			top: 290px;
+			left: 20px;
+			background: rgba(0,0,0,0.75);
+			color: white;
+			padding: 10px 12px;
+			border-radius: 8px;
+			font-size: 11px;
+			z-index: 1000;
+			backdrop-filter: blur(5px);
+			border: 1px solid #ffa500;
+			min-width: 180px;
+			max-width: 220px;
 			line-height: 1.5;
 		}
+
+			#calibration-panel h4 {
+				color: #ffa500;
+				margin-bottom: 8px;
+				font-size: 13px;
+			}
+
+		.cal-btn {
+			flex: 1;
+			padding: 6px 8px;
+			border: none;
+			border-radius: 4px;
+			cursor: pointer;
+			font-size: 11px;
+			font-weight: bold;
+			transition: all 0.2s;
+		}
+
+			.cal-btn.start {
+				background: #28a745;
+				color: white;
+			}
+
+			.cal-btn.stop {
+				background: #dc3545;
+				color: white;
+			}
+
+			.cal-btn:hover {
+				filter: brightness(1.2);
+			}
+
+		.cal-state {
+			font-weight: bold;
+		}
+
+			.cal-state.Measuring {
+				color: #4caf50;
+			}
+
+			.cal-state.Moving {
+				color: #ff9800;
+			}
+
+			.cal-state.Completed {
+				color: #2196f3;
+			}
+
+			.cal-state.Failed {
+				color: #f44336;
+			}
 
 		/* Панель маяков */
 		#beacons-panel {
@@ -304,6 +405,347 @@
 			background: #662222;
 			color: #ff6b6b;
 		}
+
+
+		/* Панель управления */
+		#control-panel {
+			padding: 12px 15px;
+			background: #fff;
+			border-bottom: 2px solid #4a90e2;
+		}
+
+			#control-panel h4 {
+				color: #333;
+				margin-bottom: 10px;
+				font-size: 14px;
+				font-weight: bold;
+			}
+
+		.control-buttons {
+			display: flex;
+			gap: 8px;
+		}
+
+		.ctrl-btn {
+			flex: 1;
+			padding: 10px 12px;
+			border: none;
+			border-radius: 6px;
+			cursor: pointer;
+			font-weight: bold;
+			font-size: 13px;
+			transition: all 0.2s ease;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			gap: 6px;
+			box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+		}
+
+			/* Состояния кнопки соединения */
+			.ctrl-btn.connect {
+				background: linear-gradient(135deg, #28a745, #20c997);
+				color: white;
+			}
+
+				.ctrl-btn.connect:hover:not(:disabled) {
+					background: linear-gradient(135deg, #218838, #1aa179);
+				}
+
+			.ctrl-btn.disconnect {
+				background: linear-gradient(135deg, #dc3545, #e74c3c);
+				color: white;
+			}
+
+				.ctrl-btn.disconnect:hover:not(:disabled) {
+					background: linear-gradient(135deg, #c82333, #d44235);
+				}
+
+			/* Состояния кнопки опроса */
+			.ctrl-btn.start {
+				background: linear-gradient(135deg, #007bff, #3498db);
+				color: white;
+			}
+
+				.ctrl-btn.start:hover:not(:disabled) {
+					background: linear-gradient(135deg, #0056b3, #2980b9);
+				}
+
+			.ctrl-btn.stop {
+				background: linear-gradient(135deg, #ffc107, #f39c12);
+				color: #212529;
+			}
+
+				.ctrl-btn.stop:hover:not(:disabled) {
+					background: linear-gradient(135deg, #e0a800, #e67e22);
+				}
+
+			.ctrl-btn:disabled {
+				opacity: 0.5;
+				cursor: not-allowed;
+			}
+
+		/* Статус команды */
+		.cmd-status {
+			margin-top: 8px;
+			padding: 4px 8px;
+			border-radius: 4px;
+			font-size: 11px;
+			min-height: 24px;
+			transition: opacity 0.3s;
+		}
+
+			.cmd-status.success {
+				background: rgba(40, 167, 69, 0.15);
+				color: #155724;
+				border-left: 3px solid #28a745;
+			}
+
+			.cmd-status.error {
+				background: rgba(220, 53, 69, 0.15);
+				color: #721c24;
+				border-left: 3px solid #dc3545;
+			}
+
+			.cmd-status.info {
+				background: rgba(0, 123, 255, 0.15);
+				color: #004085;
+				border-left: 3px solid #007bff;
+			}
+
+
+		/* ========== МОБИЛЬНАЯ АДАПТАЦИЯ ========== */
+		/* На десктопе всегда раскрыто */
+		@media screen and (min-width: 769px) {
+			#system-info {
+				padding: 12px;
+				min-width: 220px;
+				max-width: none;
+				cursor: default;
+			}
+
+				#system-info.compact .sys-detail,
+				#system-info.compact .sys-section {
+					display: block !important;
+				}
+
+				#system-info .sys-expand-hint {
+					display: none !important;
+				}
+		}
+
+		@media screen and (max-width: 768px) {
+			#container {
+				flex-direction: column !important;
+				height: 100vh;
+				overflow: auto;
+			}
+
+			#map-container {
+				flex: 0 0 50vh !important;
+				width: 100% !important;
+				min-height: 300px;
+			}
+
+			#sidebar-resizer {
+				display: none !important;
+			}
+
+			#sidebar {
+				flex: 1 1 auto !important;
+				width: 100% !important;
+				border-left: none !important;
+				border-top: 3px solid #4a90e2;
+				overflow-y: visible;
+			}
+
+			/* Панель управления картой - перемещаем вниз карты */
+			#controls {
+				top: auto !important;
+				bottom: 10px !important;
+				right: 10px !important;
+				left: 10px !important;
+				justify-content: space-around;
+				padding: 8px !important;
+			}
+
+			.control-btn {
+				width: 50px !important;
+				height: 50px !important;
+				font-size: 24px !important;
+			}
+
+			#reset-view {
+				width: auto !important;
+				padding: 0 20px !important;
+			}
+
+			/* Статус соединения - меньше, чтобы не мешал */
+			#connection-status {
+				top: 10px !important;
+				left: 10px !important;
+				padding: 4px 10px !important;
+				font-size: 11px !important;
+			}
+
+			/* Системная информация - компактнее */
+			#system-info {
+				top: 10px !important;
+				right: 10px !important;
+				left: auto !important;
+				max-width: 160px !important;
+				padding: 6px 8px !important;
+				font-size: 10px !important;
+				background: rgba(0, 0, 0, 0.8) !important;
+			}
+
+				#system-info .sys-header {
+					display: flex;
+					justify-content: space-between;
+					align-items: center;
+				}
+
+				#system-info .sys-age-badge {
+					background: rgba(74,144,226,0.3);
+					padding: 2px 6px;
+					border-radius: 10px;
+					font-size: 10px;
+				}
+
+			/* Панель калибровки на мобильных */
+			#calibration-panel {
+				top: auto !important;
+				bottom: 80px !important;
+				left: 10px !important;
+				right: 10px !important;
+				max-width: none !important;
+				font-size: 10px !important;
+			}
+
+			/* Панель маяков */
+			#beacons-panel {
+				padding: 12px !important;
+			}
+
+				#beacons-panel h3 {
+					font-size: 16px !important;
+				}
+
+			.beacon-item {
+				padding: 12px !important;
+				margin-bottom: 8px !important;
+			}
+
+			.beacon-address {
+				font-size: 14px !important;
+				padding: 4px 10px !important;
+			}
+
+			.beacon-status {
+				font-size: 12px !important;
+				padding: 3px 8px !important;
+			}
+
+			.beacon-details {
+				font-size: 13px !important;
+				grid-template-columns: 1fr !important;
+				gap: 6px !important;
+			}
+
+			.beacon-detail {
+				padding: 2px 0 !important;
+			}
+
+			/* Панель управления */
+			#control-panel {
+				padding: 15px !important;
+			}
+
+				#control-panel h4 {
+					font-size: 16px !important;
+				}
+
+			.ctrl-btn {
+				padding: 14px 12px !important;
+				font-size: 15px !important;
+				min-height: 56px !important;
+			}
+
+			.btn-icon {
+				font-size: 18px !important;
+			}
+
+			.cmd-status {
+				font-size: 13px !important;
+				padding: 8px 12px !important;
+			}
+
+			/* Панель логов */
+			#logs-panel {
+				padding: 12px !important;
+				min-height: 200px;
+				max-height: 300px;
+			}
+
+				#logs-panel h4 {
+					font-size: 14px !important;
+				}
+
+			.log-entry {
+				font-size: 11px !important;
+				padding: 6px 8px !important;
+				white-space: normal !important;
+				word-break: break-all;
+			}
+		}
+
+		/* Для очень маленьких экранов (iPhone SE и т.п.) */
+		@media screen and (max-width: 480px) {
+			#map-container {
+				flex: 0 0 40vh !important;
+			}
+
+			#system-info {
+				max-width: 150px !important;
+				font-size: 9px !important;
+			}
+
+			.control-btn {
+				width: 44px !important;
+				height: 44px !important;
+				font-size: 20px !important;
+			}
+
+			.ctrl-btn {
+				padding: 12px 8px !important;
+				font-size: 14px !important;
+			}
+
+			.beacon-address {
+				font-size: 12px !important;
+			}
+
+			.beacon-details {
+				font-size: 12px !important;
+			}
+		}
+
+		/* Для устройств с "челкой" и скруглёнными углами */
+		@supports (padding: max(0px)) {
+			@media screen and (max-width: 768px) {
+				#container {
+					padding-left: env(safe-area-inset-left);
+					padding-right: env(safe-area-inset-right);
+					padding-bottom: env(safe-area-inset-bottom);
+				}
+
+				#controls {
+					bottom: calc(10px + env(safe-area-inset-bottom)) !important;
+					left: calc(10px + env(safe-area-inset-left)) !important;
+					right: calc(10px + env(safe-area-inset-right)) !important;
+				}
+			}
+		}
 	</style>
 </head>
 <body>
@@ -316,10 +758,24 @@
 				<button class="control-btn" id="zoom-out">−</button>
 				<button class="control-btn" id="reset-view">Reset</button>
 				<button class="control-btn" id="auto-scale-btn">A</button>
-			</div>			
+			</div>
 			<div id="connection-status">● DISCONNECTED</div>
+
 			<div id="system-info">
 				<div>Loading...</div>
+			</div>
+
+			<!-- Панель калибровки (скрыта если ротатор не настроен) -->
+			<div id="calibration-panel" style="display:none;">
+				<h4>📡 Calibration</h4>
+				<div style="display:flex; gap:6px; margin-bottom:8px;">
+					<button class="cal-btn start" onclick="startCalibration()">▶ Start</button>
+					<button class="cal-btn stop" onclick="stopCalibration()">⏹ Stop</button>
+				</div>
+				<div>State: <span id="cal-state" class="cal-state">-</span></div>
+				<div>Progress: <span id="cal-points">0 / 0</span> pts</div>
+				<div>Angle: <span id="cal-current-angle">--</span>°</div>
+				<div id="cal-error-row" style="display:none; color:#ff4444;">Error: <span id="cal-error"></span></div>
 			</div>
 		</div>
 
@@ -330,6 +786,22 @@
 				<h3>📡 Beacons</h3>
 				<div id="beacons-list">No beacons detected</div>
 			</div>
+
+			<div id="control-panel">
+				<h4>🎮 Управление</h4>
+				<div class="control-buttons">
+					<button id="btn-connection" class="ctrl-btn" onclick="toggleConnection()">
+						<span class="btn-icon">🔌</span>
+						<span class="btn-text" id="connection-btn-text">Открыть</span>
+					</button>
+					<button id="btn-interrogation" class="ctrl-btn" onclick="toggleInterrogation()">
+						<span class="btn-icon">▶</span>
+						<span class="btn-text" id="interrogation-btn-text">Опрос</span>
+					</button>
+				</div>
+				<div id="cmd-status" class="cmd-status"></div>
+			</div>
+
 			<div id="logs-panel">
 				<h4>📋 Log</h4>
 				<div id="logs-list"></div>

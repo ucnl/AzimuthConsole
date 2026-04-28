@@ -24,6 +24,9 @@ let startX = 0;
 let startWidth = 0;
 let containerWidth = 0;
 
+// Хранилище времени последнего обновления для каждого маяка
+const beaconLastUpdate = new Map();
+
 // Глобальная ссылка на i18n
 window.i18n = i18n;
 
@@ -41,7 +44,6 @@ function init() {
 
     ctx = canvas.getContext('2d');
 
-    // Инициализация изменения размера панелей
     initResizeHandler();
 
     resizeCanvas();
@@ -49,13 +51,26 @@ function init() {
     initControls();
     i18n.updateStaticUI();
     initMouseHandlers();
+    initTouchHandlers();
     connectWebSocket();
     loadInitialData();
 
-    // Запускаем таймер обновления возраста
     startAgeUpdateTimer();
 
     drawMap();
+
+    const sysInfo = document.getElementById('system-info');
+    if (sysInfo && window.innerWidth <= 768) {
+        sysInfo.classList.add('compact');
+    }
+
+    if (sysInfo) {
+        sysInfo.addEventListener('click', (e) => {
+            if (window.innerWidth <= 768) {
+                sysInfo.classList.toggle('compact');
+            }
+        });
+    }
 }
 
 function initResizeHandler() {
@@ -66,7 +81,6 @@ function initResizeHandler() {
 
     if (!resizer || !container || !sidebar || !mapContainer) return;
 
-    // Устанавливаем начальные стили
     container.style.display = 'flex';
     container.style.flexDirection = 'row';
     container.style.width = '100%';
@@ -81,7 +95,7 @@ function initResizeHandler() {
     resizer.style.backgroundColor = '#4a90e2';
 
     sidebar.style.flex = '0 0 auto';
-    sidebar.style.width = '400px'; // начальная ширина
+    sidebar.style.width = '400px';
 
     resizer.addEventListener('mousedown', function (e) {
         e.preventDefault();
@@ -93,7 +107,6 @@ function initResizeHandler() {
         document.body.style.cursor = 'col-resize';
         document.body.style.userSelect = 'none';
 
-        // Временно отключаем transition
         sidebar.style.transition = 'none';
         mapContainer.style.transition = 'none';
     });
@@ -106,7 +119,6 @@ function initResizeHandler() {
         const deltaX = e.clientX - startX;
         let newWidth = startWidth - deltaX;
 
-        // Ограничения
         const minWidth = 200;
         const maxWidth = containerWidth * 0.8;
 
@@ -116,10 +128,8 @@ function initResizeHandler() {
             newWidth = maxWidth;
         }
 
-        // Обновляем ширину боковой панели
         sidebar.style.width = newWidth + 'px';
 
-        // Перерисовываем canvas
         resizeCanvas();
     });
 
@@ -129,13 +139,11 @@ function initResizeHandler() {
             document.body.style.cursor = '';
             document.body.style.userSelect = '';
 
-            // Возвращаем transition
             sidebar.style.transition = '';
             mapContainer.style.transition = '';
         }
     });
 
-    // Защита от потери разделителя при изменении размера окна
     window.addEventListener('resize', function () {
         if (!container || !sidebar) return;
 
@@ -154,42 +162,30 @@ function startAgeUpdateTimer() {
     if (ageUpdateTimer) clearInterval(ageUpdateTimer);
 
     ageUpdateTimer = setInterval(() => {
-        // Увеличиваем возраст данных для всех маяков
         if (beacons && beacons.length > 0) {
-            let needsRedraw = false;
+            let needsUpdate = false;
 
             beacons.forEach(beacon => {
-                if (beacon.DataAge !== undefined && beacon.DataAge !== null) {
-                    beacon.DataAge += 1; // Увеличиваем на 1 секунду
-                    needsRedraw = true;
-                } else {
-                    beacon.DataAge = 1; // Инициализируем возраст
-                    needsRedraw = true;
+                if (beacon.dataAge !== undefined && beacon.dataAge !== null) {
+                    beacon.dataAge += 1;
+                    needsUpdate = true;
                 }
             });
 
-            if (needsRedraw) {
+            if (needsUpdate) {
                 updateBeaconsList(beacons);
-
-                // Перерисовываем карту для обновления цвета возраста
-                if (!autoScaleEnabled) {
-                    drawMap();
-                }
             }
         }
 
-        // Обновляем возраст локального устройства
-        if (localDevice) {
-            if (localDevice.DataAge !== undefined) {
-                localDevice.DataAge += 1;
-            } else {
-                localDevice.DataAge = 1;
-            }
+        if (localDevice && localDevice.dataAge !== undefined && localDevice.dataAge !== null) {
+            localDevice.dataAge += 1;
         }
 
-        // Всегда обновляем системную информацию (там отображается возраст)
         updateSystemInfo();
 
+        if (!autoScaleEnabled) {
+            drawMap();
+        }
     }, AGE_UPDATE_INTERVAL);
 }
 
@@ -205,7 +201,6 @@ function resizeCanvas() {
     const container = document.getElementById('map-container');
     if (!container) return;
 
-    // Убеждаемся, что container имеет правильные размеры
     const computedStyle = window.getComputedStyle(container);
     if (computedStyle.display === 'none') return;
 
@@ -262,10 +257,6 @@ function connectWebSocket() {
         ws.onopen = function () {
             updateConnectionStatus(true);
             if (reconnectTimer) clearTimeout(reconnectTimer);
-
-            // Перезапускаем таймер возраста при подключении
-            stopAgeUpdateTimer();
-            startAgeUpdateTimer();
         };
 
         ws.onmessage = function (event) {
@@ -279,8 +270,6 @@ function connectWebSocket() {
         ws.onclose = function () {
             updateConnectionStatus(false);
             reconnectTimer = setTimeout(connectWebSocket, 3000);
-
-            // Таймер продолжает работать, показывая устаревание данных
         };
 
         ws.onerror = function (error) {
@@ -320,39 +309,87 @@ async function loadInitialData() {
 function updateData(data) {
     if (!data) return;
 
-    // Сбрасываем возраст при получении новых данных
-    if (data.Mode) currentMode = data.Mode;
+    if (data.mode) currentMode = data.mode;
 
-    if (data.LocalDevice) {
-        localDevice = data.LocalDevice;
-        localDevice.DataAge = 0; // Сбрасываем возраст
+    if (data.localDevice) {
+        const currentLocalAge = localDevice?.dataAge;
+        localDevice = data.localDevice;
+        if (currentLocalAge !== undefined && currentLocalAge !== null && currentLocalAge > 0) {
+            if (localDevice.dataAge === undefined || localDevice.dataAge === null || localDevice.dataAge < currentLocalAge) {
+                localDevice.dataAge = currentLocalAge;
+            }
+        }
     }
 
-    if (data.SystemInfo) {
-        systemInfo = data.SystemInfo;
+    if (data.systemInfo) {
+        systemInfo = data.systemInfo;
+        updateControlButtons();
     }
 
-    if (data.Beacons && Array.isArray(data.Beacons)) {
-        // Обновляем маяки, сбрасывая возраст для полученных
-        beacons = data.Beacons.map(beacon => {
-            beacon.DataAge = 0; // Сбрасываем возраст
+    if (data.beacons && Array.isArray(data.beacons)) {
+        const currentBeaconAges = new Map();
+        beacons.forEach(b => {
+            const key = getBeaconKey(b);
+            if (b.dataAge !== undefined && b.dataAge !== null) {
+                currentBeaconAges.set(key, b.dataAge);
+            }
+        });
+
+        beacons = data.beacons.map(beacon => {
+            const key = getBeaconKey(beacon);
+            const currentAge = currentBeaconAges.get(key);
+
+            if (beacon.isTimeout) {
+                if (currentAge !== undefined && currentAge !== null && currentAge > 0) {
+                    beacon.dataAge = currentAge;
+                } else if (beacon.dataAge === undefined || beacon.dataAge === null) {
+                    beacon.dataAge = 0;
+                }
+            } else {
+                if (beacon.dataAge !== undefined && beacon.dataAge !== null) {
+                    // оставляем серверное значение
+                } else {
+                    beacon.dataAge = 0;
+                }
+            }
+
             return beacon;
         });
 
         updateBeaconsList(beacons);
-    } else {
-        beacons = [];
-        updateBeaconsList([]);
     }
 
     updateSystemInfo();
 
-    if (data.RecentLogs && Array.isArray(data.RecentLogs)) {
-        logs = [...data.RecentLogs, ...logs].slice(0, MAX_LOGS);
+    if (data.calibration) {
+        updateCalibrationPanel(data.calibration);
+    }
+
+    if (data.recentLogs && Array.isArray(data.recentLogs)) {
+        logs = [...data.recentLogs, ...logs].slice(0, MAX_LOGS);
         updateLogs(logs);
     }
 
     if (autoScaleEnabled) autoScale(); else drawMap();
+}
+
+function getBeaconKey(beacon) {
+    if (beacon.address) {
+        return `addr_${beacon.address}`;
+    }
+    return `coord_${beacon.x}_${beacon.y}_${beacon.z}`;
+}
+
+function getBeaconAge(beacon) {
+    const key = getBeaconKey(beacon);
+    const lastUpdate = beaconLastUpdate.get(key);
+    if (!lastUpdate) return 0;
+    return Date.now() / 1000 - lastUpdate;
+}
+
+function getLocalDeviceAge() {
+    if (!localDevice || !localDevice.lastUpdate) return 0;
+    return Date.now() / 1000 - localDevice.lastUpdate;
 }
 
 function updateBeaconsList(beacons) {
@@ -367,59 +404,88 @@ function updateBeaconsList(beacons) {
     let html = '';
 
     beacons.forEach(b => {
-        const address = b.Address || '?';
+        const address = b.address || '?';
+        const dataAge = (b.dataAge !== undefined && b.dataAge !== null) ? b.dataAge : getBeaconAge(b);
+
         let details = [];
 
-        // Определяем статус на основе возраста данных
         let status = 'active';
         let statusClass = 'status-active';
         let statusText = i18n.t('active');
 
-        if (b.DataAge !== undefined && b.DataAge !== null) {
-            if (b.DataAge > 10) {
-                status = 'timeout';
-                statusClass = 'status-timeout';
-                statusText = i18n.t('timeout');
-            } else if (b.DataAge > 5) {
-                status = 'warning';
-                statusClass = 'status-warning';
-                statusText = i18n.t('warning');
+        if (b.isTimeout) {
+            status = 'timeout';
+            statusClass = 'status-timeout';
+            statusText = i18n.t('timeout');
+        } else if (dataAge > 10) {
+            status = 'timeout';
+            statusClass = 'status-timeout';
+            statusText = i18n.t('timeout');
+        } else if (dataAge > 5) {
+            status = 'warning';
+            statusClass = 'status-warning';
+            statusText = i18n.t('warning');
+        }
+
+        function addDetail(label, value, unit = '', precision = null) {
+            if (value !== undefined && value !== null && !isNaN(value)) {
+                let displayValue = value;
+                if (precision !== null) {
+                    displayValue = value.toFixed(precision);
+                }
+                details.push(`<div class="beacon-detail"><span class="detail-label">${label}:</span> <span class="detail-value">${displayValue}${unit}</span></div>`);
             }
         }
 
-        function addDetail(label, value, unit = '') {
-            if (value !== null && value !== undefined && !isNaN(value)) {
-                details.push(`<div class="beacon-detail"><span class="detail-label">${label}:</span> <span class="detail-value">${value}${unit}</span></div>`);
-            }
+        if (b.absoluteDistance !== undefined && b.absoluteDistance !== null && !isNaN(b.absoluteDistance) &&
+            b.absoluteAzimuth !== undefined && b.absoluteAzimuth !== null && !isNaN(b.absoluteAzimuth)) {
+            addDetail(i18n.t('absdist'), b.absoluteDistance, i18n.t('meter'), 1);
+            addDetail(i18n.t('absaz'), b.absoluteAzimuth, i18n.t('degree'), 1);
         }
 
-        // Основные координаты
-        if (b.AbsoluteDistance && b.AbsoluteAzimuth) {
-            addDetail('ABS Dist', b.AbsoluteDistance.toFixed(1), i18n.t('meter'));
-            addDetail('ABS Az', b.AbsoluteAzimuth.toFixed(1), i18n.t('degree'));
+        addDetail(i18n.t('x'), b.x, i18n.t('meter'), 2);
+        addDetail(i18n.t('y'), b.y, i18n.t('meter'), 2);
+        addDetail(i18n.t('z'), b.z, i18n.t('meter'), 2);
+
+        addDetail(i18n.t('distance'), b.distance, i18n.t('meter'), 1);
+        addDetail(i18n.t('azimuth'), b.azimuth, i18n.t('degree'), 1);
+        addDetail(i18n.t('elevation'), b.elevation, i18n.t('degree'), 1);
+
+        addDetail(i18n.t('depth'), b.depth, i18n.t('meter'), 1);
+        addDetail(i18n.t('signal'), b.signalLevel, ' dB', 1);
+        addDetail(i18n.t('battery'), b.battery, ' V', 2);
+        addDetail(i18n.t('temperature'), b.temperature, i18n.t('celsius'), 1);
+        addDetail(i18n.t('proptime'), b.propagationTime, ' s', 4);
+        addDetail(i18n.t('success'), b.successRate, '%', 1);
+        addDetail(i18n.t('requests'), b.totalRequests, '', 0);
+
+        if (b.latitude !== undefined && b.latitude !== null && !isNaN(b.latitude) &&
+            b.longitude !== undefined && b.longitude !== null && !isNaN(b.longitude)) {
+            addDetail(i18n.t('lat'), b.latitude, i18n.t('degree'), 6);
+            addDetail(i18n.t('lon'), b.longitude, i18n.t('degree'), 6);
         }
 
-        addDetail(i18n.t('x'), b.X?.toFixed(2), i18n.t('meter'));
-        addDetail(i18n.t('y'), b.Y?.toFixed(2), i18n.t('meter'));
-        addDetail(i18n.t('z'), b.Z?.toFixed(2), i18n.t('meter'));
-        addDetail(i18n.t('depth'), b.Depth?.toFixed(1), i18n.t('meter'));
-        addDetail(i18n.t('distance'), b.Distance?.toFixed(1), i18n.t('meter'));
-        addDetail(i18n.t('azimuth'), b.Azimuth?.toFixed(1), i18n.t('degree'));
-        addDetail(i18n.t('signal'), b.SignalLevel?.toFixed(1), ' dB');
-        addDetail(i18n.t('battery'), b.Battery?.toFixed(2), ' V');
-        addDetail(i18n.t('temperature'), b.Temperature?.toFixed(1), i18n.t('celsius'));
-
-        // Возраст данных
-        if (b.DataAge !== undefined && b.DataAge !== null) {
-            let ageColor = '#28a745';
-            if (b.DataAge > 5) ageColor = '#ffc107';
-            if (b.DataAge > 10) ageColor = '#dc3545';
-
-            details.push(`<div class="beacon-detail"><span class="detail-label">${i18n.t('dataAge')}:</span> <span class="detail-value" style="color: ${ageColor}">${b.DataAge.toFixed(1)}${i18n.t('second')}</span></div>`);
+        if (b.message) {
+            details.push(`<div class="beacon-detail"><span class="detail-label">Msg:</span> <span class="detail-value">${b.message}</span></div>`);
         }
 
-        if (b.Message) {
-            details.push(`<div class="beacon-detail"><span class="detail-label">Msg:</span> <span class="detail-value">${b.Message}</span></div>`);
+        if (b.coordinateType && b.coordinateType !== 'unknown') {
+            details.push(`<div class="beacon-detail"><span class="detail-label">Type:</span> <span class="detail-value">${b.coordinateType}</span></div>`);
+        }
+
+        let ageColor = '#28a745';
+        if (b.isTimeout) {
+            ageColor = '#dc3545';
+        } else if (dataAge > 5) {
+            ageColor = '#ffc107';
+        }
+        if (dataAge > 10) {
+            ageColor = '#dc3545';
+        }
+        details.push(`<div class="beacon-detail"><span class="detail-label">${i18n.t('dataAge')}:</span> <span class="detail-value" style="color: ${ageColor}">${dataAge.toFixed(1)}${i18n.t('second')}</span></div>`);
+
+        if (details.length <= 1) {
+            details.push(`<div class="beacon-detail" style="grid-column: 1/-1; text-align: center; color: #999;">Нет данных</div>`);
         }
 
         html += `
@@ -449,9 +515,9 @@ function updateLogs(logs) {
 
     let html = '';
     logs.forEach(log => {
-        const type = log.Type || 'info';
-        const timestamp = log.Timestamp || new Date().toLocaleTimeString();
-        const message = log.Message || '';
+        const type = log.type || 'info';
+        const timestamp = log.timestamp || new Date().toLocaleTimeString();
+        const message = log.message || '';
         html += `<div class="log-entry log-${type}">[${timestamp}] ${message}</div>`;
     });
 
@@ -466,135 +532,84 @@ function updateSystemInfo() {
     const panel = document.getElementById('system-info');
     if (!panel) return;
 
+    const isExpanded = !panel.classList.contains('compact');
+
     let html = '';
 
-    // Заголовок с устройством
+    const connectionIcon = systemInfo?.connectionActive ? '🟢' : '🔴';
+    const interrogIcon = systemInfo?.interrogationActive ? '🔵' : '⚪';
+
+    html += `<div class="sys-header">`;
+    html += `<strong>${currentMode.toUpperCase()}</strong> `;
+
+    const localAge = (localDevice?.dataAge !== undefined && localDevice?.dataAge !== null)
+        ? localDevice.dataAge
+        : getLocalDeviceAge();
+
+    let ageColor = '#28a745';
+    if (localAge > 5) ageColor = '#ffc107';
+    if (localAge > 10) ageColor = '#dc3545';
+
+    html += `<span class="sys-age-badge" style="color: ${ageColor}">${localAge.toFixed(0)}s</span>`;
+    html += `</div>`;
+
+    html += `<div style="display: flex; gap: 8px; margin-top: 4px;">`;
+    html += `<span>${connectionIcon}</span>`;
+    html += `<span>${interrogIcon}</span>`;
+    if (localDevice?.depth !== undefined && localDevice?.depth !== null && !isNaN(localDevice.depth)) {
+        html += `<span>🌊 ${localDevice.depth.toFixed(1)}m</span>`;
+    }
+    html += `</div>`;
+
     if (systemInfo) {
-        html += `<div style="margin-bottom: 8px;"><strong>${systemInfo.DeviceType || 'Unknown'}</strong> ${systemInfo.SerialNumber || ''}</div>`;
-        html += `<div style="margin-bottom: 8px; font-size: 11px;">${systemInfo.Version || '- - -'} | ${i18n.t('mode')}: ${currentMode.toUpperCase()}</div>`;
-        html += `<div style="margin-bottom: 8px; display: flex; gap: 10px;">`;
-        
-        // Статус соединения
-        if (systemInfo.ConnectionActive) {
-            html += `<span style="color: #28a745;">● ${i18n.t('connected')}</span>`;
-        } else {
-            html += `<span style="color: #dc3545;">○ ${i18n.t('disconnected')}</span>`;
-        }
-
-        // Статус опроса
-        if (systemInfo.InterrogationActive) {
-            html += `<span style="color: #28a745;">● ${i18n.t('interrogation')}</span>`;
-        } else {
-            html += `<span style="color: #ffc107;">○ ${i18n.t('interrogation')}</span>`;
-        }
-
-
+        html += `<div class="sys-detail" style="margin-top: 8px; padding-top: 6px; border-top: 1px solid rgba(255,255,255,0.2);">`;
+        html += `<div><strong>${systemInfo.deviceType || 'Unknown'}</strong></div> `;
+        html += `<div style="font-size: 9px;">${systemInfo.serialNumber || ''}</div>`;
+        html += `<div style="font-size: 9px;">${systemInfo.version || ''}</div>`;
         html += `</div>`;
-    } else {
-        html += `<div style="margin-bottom: 8px;"><strong>Unknown</strong></div>`;
-        html += `<div style="margin-bottom: 8px; font-size: 11px;">${i18n.t('mode')}: ${currentMode.toUpperCase()}</div>`;
     }
 
-    if (!localDevice) {
-        panel.innerHTML = html;
-        return;
-    }
-
-    // Функция для создания строки с выравниванием
-    function addRow(label, value, unit = '', color = '#ffffff') {
-        if (value !== undefined && value !== null && !isNaN(value)) {
-            return `<div style="display: flex; justify-content: space-between; margin: 2px 0;">
-                <span style="color: #aaa;">${label}:</span>
-                <span style="color: ${color};">${value}${unit}</span>
-            </div>`;
-        }
-        return '';
-    }
-
-    // ПОЗИЦИЯ
-    if (localDevice.X !== undefined || localDevice.Y !== undefined ||
-        localDevice.Latitude !== undefined || localDevice.Longitude !== undefined) {
-        html += `<div style="margin-top: 8px; margin-bottom: 4px; color: #4a90e2; font-weight: bold; border-bottom: 1px solid #4a90e2;">${i18n.t('position')}</div>`;
-
-        if (localDevice.X !== undefined && localDevice.X !== null && !isNaN(localDevice.X) &&
-            localDevice.Y !== undefined && localDevice.Y !== null && !isNaN(localDevice.Y)) {
-            html += addRow(i18n.t('x'), localDevice.X.toFixed(2), i18n.t('meter'));
-            html += addRow(i18n.t('y'), localDevice.Y.toFixed(2), i18n.t('meter'));
+    if (localDevice) {
+        function addRow(label, value, unit = '', color = '#fff') {
+            if (value !== undefined && value !== null && !isNaN(value)) {
+                return `<div class="sys-detail" style="display: flex; justify-content: space-between;">
+                    <span style="color: #aaa;">${label}:</span>
+                    <span style="color: ${color};">${value}${unit}</span>
+                </div>`;
+            }
+            return '';
         }
 
-        if (localDevice.Latitude !== undefined && localDevice.Latitude !== null && !isNaN(localDevice.Latitude) &&
-            localDevice.Longitude !== undefined && localDevice.Longitude !== null && !isNaN(localDevice.Longitude)) {
-            html += addRow(i18n.t('lat'), localDevice.Latitude.toFixed(6), i18n.t('degree'));
-            html += addRow(i18n.t('lon'), localDevice.Longitude.toFixed(6), i18n.t('degree'));
+        if (localDevice.x !== undefined || localDevice.y !== undefined) {
+            html += `<div class="sys-section" style="margin-top: 6px; color: #4a90e2; font-weight: bold; font-size: 9px;">${i18n.t('position')}</div>`;
+            html += addRow('X', localDevice.x?.toFixed(1), 'm');
+            html += addRow('Y', localDevice.y?.toFixed(1), 'm');
+            html += addRow('Z', localDevice.z?.toFixed(1), 'm');
         }
 
-        if (localDevice.Z !== undefined && localDevice.Z !== null && !isNaN(localDevice.Z)) {
-            html += addRow(i18n.t('z'), localDevice.Z.toFixed(2), i18n.t('meter'));
+        if (localDevice.heading !== undefined || localDevice.course !== undefined) {
+            html += `<div class="sys-section" style="margin-top: 6px; color: #4a90e2; font-weight: bold; font-size: 9px;">${i18n.t('orientation')}</div>`;
+            html += addRow(i18n.t('heading'), localDevice.heading?.toFixed(1), '°', '#ff4444');
+            html += addRow(i18n.t('course'), localDevice.course?.toFixed(1), '°', '#44ff44');
+            html += addRow(i18n.t('speed'), localDevice.speed?.toFixed(1), 'm/s');
         }
     }
 
-    // ОРИЕНТАЦИЯ И ДВИЖЕНИЕ
-    if (localDevice.Heading !== undefined || localDevice.Course !== undefined ||
-        localDevice.Speed !== undefined || localDevice.Pitch !== undefined || localDevice.Roll !== undefined) {
-        html += `<div style="margin-top: 8px; margin-bottom: 4px; color: #4a90e2; font-weight: bold; border-bottom: 1px solid #4a90e2;">${i18n.t('orientation')}</div>`;
-
-        if (localDevice.Heading !== undefined && localDevice.Heading !== null && !isNaN(localDevice.Heading)) {
-            html += addRow(i18n.t('heading'), localDevice.Heading.toFixed(1), i18n.t('degree'), '#ff4444');
-        }
-
-        if (localDevice.Course !== undefined && localDevice.Course !== null && !isNaN(localDevice.Course)) {
-            html += addRow(i18n.t('course'), localDevice.Course.toFixed(1), i18n.t('degree'), '#44ff44');
-        }
-
-        if (localDevice.Speed !== undefined && localDevice.Speed !== null && !isNaN(localDevice.Speed)) {
-            html += addRow(i18n.t('speed'), localDevice.Speed.toFixed(2), i18n.t('meterPerSec'));
-        }
-
-        if (localDevice.Pitch !== undefined && localDevice.Pitch !== null && !isNaN(localDevice.Pitch)) {
-            html += addRow(i18n.t('pitch'), localDevice.Pitch.toFixed(1), i18n.t('degree'));
-        }
-
-        if (localDevice.Roll !== undefined && localDevice.Roll !== null && !isNaN(localDevice.Roll)) {
-            html += addRow(i18n.t('roll'), localDevice.Roll.toFixed(1), i18n.t('degree'));
-        }
-    }
-
-    // ОКРУЖАЮЩАЯ СРЕДА
-    if (localDevice.Depth !== undefined || localDevice.Temperature !== undefined ||
-        localDevice.Pressure !== undefined) {
-        html += `<div style="margin-top: 8px; margin-bottom: 4px; color: #4a90e2; font-weight: bold; border-bottom: 1px solid #4a90e2;">${i18n.t('environment')}</div>`;
-
-        if (localDevice.Depth !== undefined && localDevice.Depth !== null && !isNaN(localDevice.Depth)) {
-            html += addRow(i18n.t('depth'), localDevice.Depth.toFixed(1), i18n.t('meter'));
-        }
-
-        if (localDevice.Temperature !== undefined && localDevice.Temperature !== null && !isNaN(localDevice.Temperature)) {
-            html += addRow(i18n.t('temperature'), localDevice.Temperature.toFixed(1), i18n.t('celsius'));
-        }
-
-        if (localDevice.Pressure !== undefined && localDevice.Pressure !== null && !isNaN(localDevice.Pressure)) {
-            html += addRow(i18n.t('pressure'), localDevice.Pressure.toFixed(1), i18n.t('mbar'));
-        }
-    }
-
-    // СТАТУС И КАЧЕСТВО
-    if (localDevice.RError !== undefined || localDevice.DataAge !== undefined) {
-        html += `<div style="margin-top: 8px; margin-bottom: 4px; color: #4a90e2; font-weight: bold; border-bottom: 1px solid #4a90e2;">${i18n.t('status')}</div>`;
-
-        if (localDevice.RError !== undefined && localDevice.RError !== null && !isNaN(localDevice.RError)) {
-            let color = localDevice.RError < 1 ? '#28a745' : (localDevice.RError < 3 ? '#ffc107' : '#dc3545');
-            html += addRow(i18n.t('rError'), localDevice.RError.toFixed(2), i18n.t('meter'), color);
-        }
-
-        if (localDevice.DataAge !== undefined) {
-            let ageColor = '#28a745';
-            if (localDevice.DataAge > 5) ageColor = '#ffc107';
-            if (localDevice.DataAge > 10) ageColor = '#dc3545';
-            html += addRow(i18n.t('dataAge'), localDevice.DataAge.toFixed(1), i18n.t('second'), ageColor);
-        }
-    }
+    html += `<div class="sys-expand-hint">${i18n.t('expandHint')}</div>`;
 
     panel.innerHTML = html;
+
+    if (window.innerWidth <= 768) {
+        if (isExpanded) {
+            panel.classList.remove('compact');
+        } else {
+            panel.classList.add('compact');
+        }
+    } else {
+        panel.classList.remove('compact');
+    }
+
+    updateControlButtons();
 }
 
 function drawMap() {
@@ -647,33 +662,30 @@ function drawBeacons() {
             let x, y;
             let coordType = 'none';
 
-            // ПРИОРИТЕТ 1: Абсолютные координаты (уже пересчитаны из географических)
-            if (beacon.AbsoluteDistance && beacon.AbsoluteAzimuth !== undefined &&
-                !isNaN(beacon.AbsoluteDistance) && !isNaN(beacon.AbsoluteAzimuth)) {
+            if (beacon.absoluteDistance && beacon.absoluteAzimuth !== undefined &&
+                !isNaN(beacon.absoluteDistance) && !isNaN(beacon.absoluteAzimuth)) {
 
-                let angle = beacon.AbsoluteAzimuth * Math.PI / 180;
-                x = offsetX + beacon.AbsoluteDistance * Math.sin(angle) * scale;
-                y = offsetY - beacon.AbsoluteDistance * Math.cos(angle) * scale;
+                let angle = beacon.absoluteAzimuth * Math.PI / 180;
+                x = offsetX + beacon.absoluteDistance * Math.sin(angle) * scale;
+                y = offsetY - beacon.absoluteDistance * Math.cos(angle) * scale;
                 coordType = 'absolute';
             }
-            // ПРИОРИТЕТ 2: Декартовы координаты
-            else if (beacon.X !== undefined && beacon.X !== null &&
-                beacon.Y !== undefined && beacon.Y !== null &&
-                !isNaN(beacon.X) && !isNaN(beacon.Y)) {
+            else if (beacon.x !== undefined && beacon.x !== null &&
+                beacon.y !== undefined && beacon.y !== null &&
+                !isNaN(beacon.x) && !isNaN(beacon.y)) {
 
-                x = beacon.X * scale + offsetX;
-                y = -beacon.Y * scale + offsetY;
+                x = beacon.x * scale + offsetX;
+                y = -beacon.y * scale + offsetY;
                 coordType = 'cartesian';
             }
-            // ПРИОРИТЕТ 3: Полярные координаты
-            else if (beacon.Distance && beacon.Azimuth !== undefined &&
-                beacon.Azimuth !== null && !isNaN(beacon.Distance) && !isNaN(beacon.Azimuth)) {
+            else if (beacon.distance && beacon.azimuth !== undefined &&
+                beacon.azimuth !== null && !isNaN(beacon.distance) && !isNaN(beacon.azimuth)) {
 
-                let heading = (localDevice?.Heading && !isNaN(localDevice.Heading) && localDevice.HasHeading)
-                    ? localDevice.Heading : 0;
-                let angle = (beacon.Azimuth - heading) * Math.PI / 180;
-                x = offsetX + beacon.Distance * Math.sin(angle) * scale;
-                y = offsetY - beacon.Distance * Math.cos(angle) * scale;
+                let heading = (localDevice?.heading && !isNaN(localDevice.heading) && localDevice.hasHeading)
+                    ? localDevice.heading : 0;
+                let angle = (beacon.azimuth - heading) * Math.PI / 180;
+                x = offsetX + beacon.distance * Math.sin(angle) * scale;
+                y = offsetY - beacon.distance * Math.cos(angle) * scale;
                 coordType = 'polar';
             }
             else {
@@ -682,25 +694,21 @@ function drawBeacons() {
 
             if (isNaN(x) || isNaN(y) || !isFinite(x) || !isFinite(y)) return;
 
-            // Проверка видимости
             const margin = 100;
             if (x < -margin || x > canvas.width + margin ||
                 y < -margin || y > canvas.height + margin) return;
 
-            // Рисуем маяк
             ctx.beginPath();
             ctx.arc(x, y, 18, 0, 2 * Math.PI);
 
-            // Цвет зависит от возраста и типа координат
             let fillStyle;
-            const age = beacon.DataAge || 0;
+            const age = (beacon.dataAge !== undefined && beacon.dataAge !== null) ? beacon.dataAge : getBeaconAge(beacon);
 
             if (coordType === 'absolute') {
-                // Абсолютные координаты - золотой оттенок с учетом возраста
                 const opacity = Math.max(0.3, 1 - age / 20);
                 fillStyle = `rgba(255, 215, 0, ${opacity})`;
             } else {
-                const hue = ((beacon.Address || index + 1) * 30) % 360;
+                const hue = ((beacon.address || index + 1) * 30) % 360;
                 const opacity = Math.max(0.3, 1 - age / 20);
                 fillStyle = `hsla(${hue}, 80%, 60%, ${opacity})`;
             }
@@ -711,31 +719,28 @@ function drawBeacons() {
             ctx.lineWidth = 3;
             ctx.stroke();
 
-            // Адрес маяка
             ctx.fillStyle = 'white';
             ctx.font = 'bold 14px Arial';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
-            ctx.fillText(beacon.Address?.toString() || (index + 1).toString(), x, y);
+            ctx.fillText(beacon.address?.toString() || (index + 1).toString(), x, y);
 
-            // Подпись с типом координат
             ctx.font = '10px Arial';
             ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
 
             let label = '';
             if (coordType === 'absolute') {
-                label = `ABS ${beacon.AbsoluteDistance.toFixed(0)}m`;
+                label = `ABS ${beacon.absoluteDistance.toFixed(0)}m`;
             } else if (coordType === 'cartesian') {
-                label = `${beacon.X?.toFixed(0) || '?'}, ${beacon.Y?.toFixed(0) || '?'}`;
+                label = `${beacon.x?.toFixed(0) || '?'}, ${beacon.y?.toFixed(0) || '?'}`;
             } else if (coordType === 'polar') {
-                label = `${beacon.Distance.toFixed(0)}m`;
+                label = `${beacon.distance.toFixed(0)}m`;
             }
 
             if (label) {
                 ctx.fillText(label, x, y + 30);
             }
 
-            // Если возраст большой, показываем предупреждение
             if (age > 8) {
                 ctx.font = '12px Arial';
                 ctx.fillStyle = '#ff4444';
@@ -751,21 +756,18 @@ function drawBeacons() {
 function drawLocalDevice() {
     if (!localDevice) return;
 
-    // Определяем позицию устройства
     let deviceX = offsetX;
     let deviceY = offsetY;
 
-    // В LBL режиме устройство может иметь свои координаты
-    if (currentMode === 'lbl' && localDevice.X !== undefined && localDevice.X !== null &&
-        localDevice.Y !== undefined && localDevice.Y !== null) {
-        deviceX = localDevice.X * scale + offsetX;
-        deviceY = -localDevice.Y * scale + offsetY;
+    if (currentMode === 'lbl' && localDevice.x !== undefined && localDevice.x !== null &&
+        localDevice.y !== undefined && localDevice.y !== null) {
+        deviceX = localDevice.x * scale + offsetX;
+        deviceY = -localDevice.y * scale + offsetY;
     }
 
     const x = deviceX;
     const y = deviceY;
 
-    // Рисуем устройство (ромб)
     ctx.beginPath();
     ctx.moveTo(x, y - 20);
     ctx.lineTo(x + 20, y);
@@ -773,16 +775,17 @@ function drawLocalDevice() {
     ctx.lineTo(x - 20, y);
     ctx.closePath();
 
-    // Цвет в зависимости от режима и возраста данных
     let baseColor;
     if (currentMode === 'usbl') {
-        baseColor = '0, 255, 255'; // Голубой для USBL
+        baseColor = '0, 255, 255';
     } else {
-        baseColor = '74, 144, 226'; // Синий для LBL
+        baseColor = '74, 144, 226';
     }
 
-    // Учитываем возраст данных для прозрачности
-    const age = localDevice.DataAge || 0;
+    const age = (localDevice.dataAge !== undefined && localDevice.dataAge !== null)
+        ? localDevice.dataAge
+        : getLocalDeviceAge();
+
     const opacity = Math.max(0.3, 1 - age / 20);
 
     ctx.fillStyle = `rgba(${baseColor}, ${opacity})`;
@@ -791,10 +794,9 @@ function drawLocalDevice() {
     ctx.lineWidth = 3;
     ctx.stroke();
 
-    // Рисуем направление (Heading) - красная стрелка
-    if (localDevice.Heading !== null && !isNaN(localDevice.Heading) && localDevice.HasHeading) {
+    if (localDevice.heading !== null && !isNaN(localDevice.heading) && localDevice.hasHeading) {
         try {
-            const angle = localDevice.Heading * Math.PI / 180;
+            const angle = localDevice.heading * Math.PI / 180;
             const arrowX = x + 40 * Math.sin(angle);
             const arrowY = y - 40 * Math.cos(angle);
 
@@ -810,7 +812,6 @@ function drawLocalDevice() {
             ctx.fillStyle = '#ff4444';
             ctx.fill();
 
-            // Подпись Heading
             ctx.font = '10px Arial';
             ctx.fillStyle = '#ff4444';
             ctx.fillText('H', arrowX + 10, arrowY - 10);
@@ -820,10 +821,9 @@ function drawLocalDevice() {
         }
     }
 
-    // Рисуем курс (Course) - зеленая стрелка
-    if (localDevice.Course !== undefined && localDevice.Course !== null && !isNaN(localDevice.Course)) {
+    if (localDevice.course !== undefined && localDevice.course !== null && !isNaN(localDevice.course)) {
         try {
-            const angle = localDevice.Course * Math.PI / 180;
+            const angle = localDevice.course * Math.PI / 180;
             const arrowX = x + 35 * Math.sin(angle);
             const arrowY = y - 35 * Math.cos(angle);
 
@@ -839,7 +839,6 @@ function drawLocalDevice() {
             ctx.fillStyle = '#44ff44';
             ctx.fill();
 
-            // Подпись Course
             ctx.font = '10px Arial';
             ctx.fillStyle = '#44ff44';
             ctx.fillText('C', arrowX + 8, arrowY - 8);
@@ -849,21 +848,18 @@ function drawLocalDevice() {
         }
     }
 
-    // Скорость если есть
-    if (localDevice.Speed !== undefined && localDevice.Speed !== null && !isNaN(localDevice.Speed)) {
+    if (localDevice.speed !== undefined && localDevice.speed !== null && !isNaN(localDevice.speed)) {
         ctx.font = '10px Arial';
         ctx.fillStyle = 'white';
-        ctx.fillText(`${localDevice.Speed.toFixed(1)} ${i18n.t('meterPerSec')}`, x + 25, y - 25);
+        ctx.fillText(`${localDevice.speed.toFixed(1)} ${i18n.t('meterPerSec')}`, x + 25, y - 25);
     }
 
-    // Глубина если есть
-    if (localDevice.Depth !== undefined && localDevice.Depth !== null && !isNaN(localDevice.Depth)) {
+    if (localDevice.depth !== undefined && localDevice.depth !== null && !isNaN(localDevice.depth)) {
         ctx.font = '10px Arial';
         ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
-        ctx.fillText(`${i18n.t('depth')}: ${localDevice.Depth.toFixed(1)}${i18n.t('meter')}`, x + 25, y - 35);
+        ctx.fillText(`${i18n.t('depth')}: ${localDevice.depth.toFixed(1)}${i18n.t('meter')}`, x + 25, y - 35);
     }
 
-    // Подпись устройства
     ctx.fillStyle = 'white';
     ctx.font = 'bold 12px Arial';
 
@@ -873,29 +869,25 @@ function drawLocalDevice() {
         ctx.fillText(i18n.t('station'), x - 30, y - 35);
     }
 
-    // Координаты если есть
-    if (localDevice.X !== undefined && localDevice.X !== null &&
-        localDevice.Y !== undefined && localDevice.Y !== null) {
+    if (localDevice.x !== undefined && localDevice.x !== null &&
+        localDevice.y !== undefined && localDevice.y !== null) {
         ctx.font = '9px Arial';
         ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
-        ctx.fillText(`${i18n.t('x')}:${localDevice.X.toFixed(1)} ${i18n.t('y')}:${localDevice.Y.toFixed(1)}`, x - 40, y - 50);
+        ctx.fillText(`${i18n.t('x')}:${localDevice.x.toFixed(1)} ${i18n.t('y')}:${localDevice.y.toFixed(1)}`, x - 40, y - 50);
     }
 }
 
 function drawScaleBar() {
     if (!canvas || !ctx) return;
 
-    const padding = 30; // отступ от правого края canvas
-    const splitterWidth = 5; // ширина сплиттера
-    const rightOffset = 20; // дополнительный отступ от сплиттера
+    const padding = 30;
+    const splitterWidth = 5;
+    const rightOffset = 20;
 
-    // Получаем ширину canvas
     const canvasWidth = canvas.width;
 
-    // Сначала определяем длину линейки в метрах и пикселях
-    const rawMeters = 100 / scale; // сколько метров в 100 пикселях
+    const rawMeters = 100 / scale;
 
-    // Выбираем красивую длину для отображения
     let displayMeters, displayWidth;
 
     if (rawMeters < 5) {
@@ -927,18 +919,15 @@ function drawScaleBar() {
         displayWidth = displayMeters * scale;
     }
 
-    // Ограничиваем максимальную ширину, чтобы не вылезать за левый край
     const maxAllowedWidth = canvasWidth - padding * 2 - splitterWidth - rightOffset;
     if (displayWidth > maxAllowedWidth) {
         displayWidth = maxAllowedWidth;
         displayMeters = Math.round(displayWidth / scale);
     }
 
-    // Теперь вычисляем позицию - от правого края с отступами
     const barX = canvasWidth - padding - displayWidth - splitterWidth - rightOffset;
     const barY = canvas.height - padding;
 
-    // Рисуем линейку
     ctx.beginPath();
     ctx.moveTo(barX, barY);
     ctx.lineTo(barX + displayWidth, barY);
@@ -946,7 +935,6 @@ function drawScaleBar() {
     ctx.lineWidth = 3;
     ctx.stroke();
 
-    // Рисуем вертикальные ограничители
     ctx.beginPath();
     ctx.moveTo(barX, barY - 8);
     ctx.lineTo(barX, barY + 8);
@@ -959,7 +947,6 @@ function drawScaleBar() {
     ctx.lineTo(barX + displayWidth, barY + 8);
     ctx.stroke();
 
-    // Подпись
     ctx.font = 'bold 12px Arial';
     ctx.fillStyle = 'white';
     ctx.textAlign = 'center';
@@ -986,29 +973,26 @@ function autoScale() {
     beacons.forEach(beacon => {
         let worldX, worldY;
 
-        // ПРИОРИТЕТ 1: Абсолютные координаты
-        if (beacon.AbsoluteDistance && beacon.AbsoluteAzimuth !== undefined &&
-            !isNaN(beacon.AbsoluteDistance) && !isNaN(beacon.AbsoluteAzimuth)) {
+        if (beacon.absoluteDistance && beacon.absoluteAzimuth !== undefined &&
+            !isNaN(beacon.absoluteDistance) && !isNaN(beacon.absoluteAzimuth)) {
 
-            let angle = beacon.AbsoluteAzimuth * Math.PI / 180;
-            worldX = beacon.AbsoluteDistance * Math.sin(angle);
-            worldY = beacon.AbsoluteDistance * Math.cos(angle);
+            let angle = beacon.absoluteAzimuth * Math.PI / 180;
+            worldX = beacon.absoluteDistance * Math.sin(angle);
+            worldY = beacon.absoluteDistance * Math.cos(angle);
             pointsFound = true;
         }
-        // ПРИОРИТЕТ 2: Декартовы координаты
-        else if (beacon.X !== undefined && !isNaN(beacon.X) &&
-            beacon.Y !== undefined && !isNaN(beacon.Y)) {
-            worldX = beacon.X;
-            worldY = beacon.Y;
+        else if (beacon.x !== undefined && !isNaN(beacon.x) &&
+            beacon.y !== undefined && !isNaN(beacon.y)) {
+            worldX = beacon.x;
+            worldY = beacon.y;
             pointsFound = true;
         }
-        // ПРИОРИТЕТ 3: Полярные координаты
-        else if (beacon.Distance && beacon.Azimuth !== undefined && !isNaN(beacon.Azimuth)) {
-            let heading = (localDevice?.Heading && !isNaN(localDevice.Heading) && localDevice.HasHeading)
-                ? localDevice.Heading : 0;
-            let angle = (beacon.Azimuth - heading) * Math.PI / 180;
-            worldX = beacon.Distance * Math.sin(angle);
-            worldY = beacon.Distance * Math.cos(angle);
+        else if (beacon.distance && beacon.azimuth !== undefined && !isNaN(beacon.azimuth)) {
+            let heading = (localDevice?.heading && !isNaN(localDevice.heading) && localDevice.hasHeading)
+                ? localDevice.heading : 0;
+            let angle = (beacon.azimuth - heading) * Math.PI / 180;
+            worldX = beacon.distance * Math.sin(angle);
+            worldY = beacon.distance * Math.cos(angle);
             pointsFound = true;
         }
 
@@ -1020,23 +1004,21 @@ function autoScale() {
         }
     });
 
-    // Добавляем локальное устройство
     if (localDevice) {
-        if (localDevice.X !== undefined && !isNaN(localDevice.X)) {
-            minX = Math.min(minX, localDevice.X);
-            maxX = Math.max(maxX, localDevice.X);
+        if (localDevice.x !== undefined && !isNaN(localDevice.x)) {
+            minX = Math.min(minX, localDevice.x);
+            maxX = Math.max(maxX, localDevice.x);
             pointsFound = true;
         }
-        if (localDevice.Y !== undefined && !isNaN(localDevice.Y)) {
-            minY = Math.min(minY, localDevice.Y);
-            maxY = Math.max(maxY, localDevice.Y);
+        if (localDevice.y !== undefined && !isNaN(localDevice.y)) {
+            minY = Math.min(minY, localDevice.y);
+            maxY = Math.max(maxY, localDevice.y);
             pointsFound = true;
         }
     }
 
     if (!pointsFound) return;
 
-    // Добавляем отступы
     const rangeX = maxX - minX;
     const rangeY = maxY - minY;
     const padding = 0.2;
@@ -1133,16 +1115,276 @@ function initMouseHandlers() {
     });
 }
 
-// Очистка при выгрузке страницы
+function initTouchHandlers() {
+    if (!canvas) return;
+
+    canvas.addEventListener('touchstart', (e) => {
+        if (e.touches.length === 1) {
+            e.preventDefault();
+            const touch = e.touches[0];
+            isDragging = true;
+            lastMouseX = touch.clientX;
+            lastMouseY = touch.clientY;
+        }
+    });
+
+    canvas.addEventListener('touchmove', (e) => {
+        if (isDragging && e.touches.length === 1) {
+            e.preventDefault();
+            const touch = e.touches[0];
+            offsetX += touch.clientX - lastMouseX;
+            offsetY += touch.clientY - lastMouseY;
+            lastMouseX = touch.clientX;
+            lastMouseY = touch.clientY;
+
+            if (autoScaleEnabled) {
+                autoScaleEnabled = false;
+                document.getElementById('auto-scale-btn')?.classList.add('off');
+            }
+            drawMap();
+        }
+    });
+
+    canvas.addEventListener('touchend', (e) => {
+        e.preventDefault();
+        isDragging = false;
+    });
+
+    let initialDistance = 0;
+    let initialScale = scale;
+
+    canvas.addEventListener('touchstart', (e) => {
+        if (e.touches.length === 2) {
+            e.preventDefault();
+            const dx = e.touches[0].clientX - e.touches[1].clientX;
+            const dy = e.touches[0].clientY - e.touches[1].clientY;
+            initialDistance = Math.sqrt(dx * dx + dy * dy);
+            initialScale = scale;
+            isDragging = false;
+        }
+    });
+
+    canvas.addEventListener('touchmove', (e) => {
+        if (e.touches.length === 2) {
+            e.preventDefault();
+            const dx = e.touches[0].clientX - e.touches[1].clientX;
+            const dy = e.touches[0].clientY - e.touches[1].clientY;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+
+            if (initialDistance > 0) {
+                scale = initialScale * (distance / initialDistance);
+                scale = Math.min(Math.max(scale, 10), 2000);
+
+                if (autoScaleEnabled) {
+                    autoScaleEnabled = false;
+                    document.getElementById('auto-scale-btn')?.classList.add('off');
+                }
+                drawMap();
+            }
+        }
+    });
+}
+
 window.addEventListener('beforeunload', function () {
     stopAgeUpdateTimer();
     if (ws) ws.close();
     if (reconnectTimer) clearTimeout(reconnectTimer);
 });
 
+// ========== УПРАВЛЕНИЕ КОМАНДАМИ ==========
+
+let commandInProgress = false;
+
+function toggleConnection() {
+    if (!systemInfo) return;
+
+    const currentState = systemInfo.connectionActive;
+    const command = currentState ? 'CCON' : 'OCON';
+
+    systemInfo.connectionActive = !currentState;
+    systemInfo.interrogationActive = systemInfo.connectionActive ? systemInfo.interrogationActive : false;
+    updateControlButtons();
+
+    sendCommand(command);
+}
+
+function toggleInterrogation() {
+    if (!systemInfo) return;
+
+    const currentState = systemInfo.interrogationActive;
+    const command = currentState ? 'PITG' : 'RITG';
+
+    systemInfo.interrogationActive = !currentState;
+    updateControlButtons();
+
+    sendCommand(command);
+}
+
+// ========== ОТПРАВКА КОМАНД ==========
+
+function sendCommand(command) {
+    if (commandInProgress) {
+        showCommandStatus(i18n.t('wait'), 'info');
+        return;
+    }
+
+    commandInProgress = true;
+    console.log('Sending command:', command);
+    showCommandStatus(`${i18n.t('sending')} ${command}...`, 'info');
+
+    const finishCommand = () => {
+        commandInProgress = false;
+    };
+
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ Type: command, Data: null }));
+        showCommandStatus(i18n.t('commandSent'), 'success');
+        finishCommand();
+        return;
+    }
+
+    fetch('/api/command', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ Type: command, Data: null })
+    })
+        .then(response => {
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            return response.json();
+        })
+        .then(data => {
+            showCommandStatus(i18n.t('commandDone'), 'success');
+            setTimeout(() => loadInitialData(), 500);
+            finishCommand();
+        })
+        .catch(error => {
+            showCommandStatus(`${i18n.t('error')}: ${error.message}`, 'error');
+            setTimeout(() => loadInitialData(), 1000);
+            finishCommand();
+        });
+}
+
+function showCommandStatus(message, type) {
+    const statusEl = document.getElementById('cmd-status');
+    if (!statusEl) return;
+
+    statusEl.textContent = message;
+    statusEl.className = 'cmd-status ' + type;
+
+    if (type === 'success') {
+        setTimeout(() => {
+            if (statusEl.textContent === message) {
+                statusEl.style.opacity = '0';
+                setTimeout(() => {
+                    statusEl.textContent = '';
+                    statusEl.className = 'cmd-status';
+                    statusEl.style.opacity = '1';
+                }, 300);
+            }
+        }, 2000);
+    }
+}
+
+function updateControlButtons() {
+    const btnConnection = document.getElementById('btn-connection');
+    const btnInterrogation = document.getElementById('btn-interrogation');
+    const connText = document.getElementById('connection-btn-text');
+    const interText = document.getElementById('interrogation-btn-text');
+
+    if (!systemInfo) {
+        if (btnConnection) btnConnection.disabled = true;
+        if (btnInterrogation) btnInterrogation.disabled = true;
+        return;
+    }
+
+    if (btnConnection && connText) {
+        btnConnection.disabled = false;
+        if (systemInfo.connectionActive) {
+            connText.textContent = i18n.t('close');
+            btnConnection.className = 'ctrl-btn disconnect';
+            btnConnection.querySelector('.btn-icon').textContent = '🔌';
+        } else {
+            connText.textContent = i18n.t('open');
+            btnConnection.className = 'ctrl-btn connect';
+            btnConnection.querySelector('.btn-icon').textContent = '🔌';
+        }
+    }
+
+    if (btnInterrogation && interText) {
+        btnInterrogation.disabled = !systemInfo.connectionActive;
+
+        if (systemInfo.interrogationActive) {
+            interText.textContent = i18n.t('pause');
+            btnInterrogation.className = 'ctrl-btn stop';
+            btnInterrogation.querySelector('.btn-icon').textContent = '⏸';
+        } else {
+            interText.textContent = i18n.t('interrogate');
+            btnInterrogation.className = 'ctrl-btn start';
+            btnInterrogation.querySelector('.btn-icon').textContent = '▶';
+        }
+    }
+}
+
+// ========== КАЛИБРОВКА ==========
+
+function startCalibration() {
+    if (!confirm(i18n.t('confirmCalibration') || 'Start calibration? This will rotate the antenna.')) return;
+    sendCommand('SCAL,,,');
+}
+
+function stopCalibration() {
+    sendCommand('FCAL');
+}
+
+function updateCalibrationPanel(calData) {
+    const panel = document.getElementById('calibration-panel');
+    if (!panel) return;
+
+    if (!calData || !calData.isAvailable) {
+        panel.style.display = 'none';
+        return;
+    }
+
+    panel.style.display = 'block';
+
+    const stateEl = document.getElementById('cal-state');
+    if (stateEl) {
+        stateEl.textContent = calData.state || 'Idle';
+        switch (calData.state) {
+            case 'Measuring': stateEl.style.color = '#4caf50'; break;
+            case 'Moving': stateEl.style.color = '#ff9800'; break;
+            case 'Completed': stateEl.style.color = '#2196f3'; break;
+            case 'Failed': stateEl.style.color = '#f44336'; break;
+            default: stateEl.style.color = '#aaa'; break;
+        }
+    }
+
+    const pointsEl = document.getElementById('cal-points');
+    if (pointsEl) {
+        pointsEl.textContent = `${calData.collectedPoints || 0} / ${calData.totalPoints || '?'}`;
+    }
+
+    const angleEl = document.getElementById('cal-current-angle');
+    if (angleEl) {
+        const angle = calData.currentAngle;
+        if (angle !== null && angle !== undefined && !isNaN(angle)) {
+            angleEl.textContent = angle.toFixed(1);
+        }
+    }
+
+    const errorRow = document.getElementById('cal-error-row');
+    const errorEl = document.getElementById('cal-error');
+    if (calData.lastError) {
+        if (errorRow) errorRow.style.display = '';
+        if (errorEl) errorEl.textContent = calData.lastError;
+    } else {
+        if (errorRow) errorRow.style.display = 'none';
+    }
+}
+
 // Отладка
 window.debug = {
-    state: () => ({ localDevice, beacons, logs, currentMode, systemInfo }),
+    state: () => ({ localDevice, beacons, logs, currentMode, systemInfo, beaconLastUpdate: Array.from(beaconLastUpdate.entries()) }),
     redraw: drawMap,
     logState: () => {
         console.log('=== DEBUG STATE ===');
@@ -1150,6 +1392,7 @@ window.debug = {
         console.log('localDevice:', localDevice);
         console.log('systemInfo:', systemInfo);
         console.log('beacons:', beacons);
+        console.log('beaconLastUpdate:', Array.from(beaconLastUpdate.entries()));
         console.log('logs:', logs);
         console.log('scale:', scale);
         console.log('offset:', offsetX, offsetY);
