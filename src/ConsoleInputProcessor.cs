@@ -6,8 +6,14 @@ public class ConsoleInputProcessor : IAsyncDisposable, IDisposable
     private readonly CancellationTokenSource _cts = new();
     private bool _disposed;
     private string cmdToEmulate = string.Empty;
+    private readonly bool _hasConsole;
 
     private readonly Dictionary<ConsoleKeyInfo, (Action action, string description)> _hotkeys = new();
+
+    public ConsoleInputProcessor()
+    {
+        _hasConsole = !Console.IsInputRedirected && !Console.IsOutputRedirected;
+    }
 
     public void RegisterHotkey(ConsoleKeyInfo keyInfo, Action action, string description)
     {
@@ -34,6 +40,13 @@ public class ConsoleInputProcessor : IAsyncDisposable, IDisposable
 
     public async Task<string?> ReadCommandAsync(CancellationToken cancellationToken = default)
     {
+        if (!_hasConsole)
+        {
+            await Task.Delay(-1, cancellationToken);
+            return null;
+        }
+
+
         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token, cancellationToken);
 
         while (!linkedCts.IsCancellationRequested)

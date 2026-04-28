@@ -24,7 +24,7 @@ namespace AzimuthConsole
 
         public CmdProcessor()
         {
-            commands = [];
+            commands = new Dictionary<string, Command>();
         }
 
         private static Dictionary<string, Func<string, object>> parsers = new()
