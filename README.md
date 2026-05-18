@@ -1,7 +1,7 @@
 # 🐙 AzimuthConsole 
 
 _version:_ 
-- **1.3.***
+- [**2.1.***](https://github.com/ucnl/AzimuthConsole/releases)
 
 _platforms:_
 - [win x64](https://github.com/ucnl/AzimuthConsole/releases/download/1.1/AzimuthConsole_win_x64.zip)
