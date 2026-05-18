@@ -1,12 +1,10 @@
-﻿// i18n.js - поддержка двух языков (русский/английский)
+﻿// i18n.js — финальная версия
 const i18n = {
-    // Текущий язык (определяем из браузера)
     currentLang: (navigator.language || navigator.userLanguage || 'en').startsWith('ru') ? 'ru' : 'en',
 
-    // Словарь переводов
     translations: {
         en: {
-            // Интерфейс
+            // Interface
             beacons: 'Beacons',
             log: 'Log',
             noBeacons: 'No beacons detected',
@@ -18,74 +16,74 @@ const i18n = {
             control: 'Control',
             expandHint: '▼ tap ▼',
 
-            // Разделы
+            // Sections
             position: '📍 POSITION',
             orientation: '🧭 ORIENTATION',
             environment: '🌊 ENVIRONMENT',
             status: '📊 STATUS',
+            pause: 'PAUSED',
 
-            // Параметры
-            x: 'X',
-            y: 'Y',
-            z: 'Z',
-            lat: 'Lat',
-            lon: 'Lon',
-            heading: 'Heading',
-            course: 'Course',
-            speed: 'Speed',
-            pitch: 'Pitch',
-            roll: 'Roll',
-            depth: 'Depth',
-            temperature: 'Temp',
-            pressure: 'Pressure',
-            rError: 'R Error',
-            dataAge: 'Age',
-            distance: 'Dist',
-            azimuth: 'Az',
-            signal: 'Signal',
-            battery: 'Battery',
-            elevation: 'Elevation',
-            proptime: 'PTime',
-            absaz: 'Abs. Azimuth',
-            absdist: 'Abs. Dist.',
-            success: 'Success',
-            requests: 'Requests',
+            // Parameters
+            x: 'X', y: 'Y', z: 'Z',
+            lat: 'Lat', lon: 'Lon',
+            heading: 'Heading', course: 'Course', speed: 'Speed',
+            pitch: 'Pitch', roll: 'Roll',
+            depth: 'Depth', temperature: 'Temp', pressure: 'Pressure',
+            rError: 'R Error', dataAge: 'Age',
+            distance: 'Dist', azimuth: 'Az', signal: 'Signal',
+            battery: 'Battery', elevation: 'Elevation',
+            proptime: 'PTime', absaz: 'Abs. Azimuth', absdist: 'Abs. Dist.',
+            success: 'Success', requests: 'Requests',
 
-            // Единицы измерения
-            meter: 'm',
-            meterPerSec: 'm/s',
-            degree: '°',
-            celsius: '°C',
-            mbar: 'mBar',
-            second: 's',
+            // Units
+            meter: 'm', meterPerSec: 'm/s', degree: '°', celsius: '°C',
+            mbar: 'mBar', second: 's',
 
-            // Статусы маяков
-            active: 'ACTIVE',
-            warning: 'WARNING',
-            timeout: 'TIMEOUT',
+            // Beacon statuses
+            active: 'ACTIVE', warning: 'WARNING', timeout: 'TIMEOUT',
 
-            // Кнопки
-            zoomIn: 'Zoom In',
-            zoomOut: 'Zoom Out',
-            reset: 'Reset',
-            autoScale: 'Auto Scale',
-            open: 'Open',
-            close: 'Close',
-            interrogate: 'Interrogate',
-            pause: 'Pause',
+            // Map buttons
+            zoomIn: 'Zoom In', zoomOut: 'Zoom Out',
+            reset: 'Reset', autoScale: 'Auto Scale',
 
-            // Статусы
-            mode: 'Mode',
-            interrogation: 'Interrogation',
+            // Control buttons
+            open: 'Open', close: 'Close',
+            interrogate: 'Interrogate', pause: 'Pause',
 
-            // Команды
+            // Commands
             sending: 'Sending',
-            commandSent: 'Command sent',
+            send: 'Send',
             commandDone: 'Command done',
             error: 'Error',
             wait: 'Wait, command in progress...',
 
-            // Калибровка
+            // Settings modal
+            settings: '⚙️ Settings',
+            portsTitle: '🔌 Ports',
+            outputTitle: '📤 Output',
+            positionTitle: '📍 Position',
+            transceiverTitle: '📡 Transceiver',
+            applyAll: 'Apply All',
+            applyRestart: 'Apply & Restart',
+            cancel: 'Cancel',
+            disableOverride: 'Disable Override',
+            serialOutput: 'Serial Output',
+            udpOutput: 'UDP Output',
+            psimssbOutput: 'PSIMSSB output',
+            transceiverHint: 'Changes sent on Apply & Restart.',
+            mask: 'Mask',
+            salinity: 'Salinity',
+            maxDist: 'Max Dist',
+            soundSpeed: 'Sound Spd',
+            offsets: 'Antenna Offsets',
+            locationOverride: 'Location Override',
+            overrideHint: 'Empty fields = disable override.',
+
+            // Validation
+            invalidNumber: 'invalid number',
+            mustBeRange: 'must be',
+
+            // Calibration
             calibration: 'Calibration',
             calStart: 'Start',
             calStop: 'Stop',
@@ -100,9 +98,32 @@ const i18n = {
             calStateMeasuring: 'Measuring',
             calStateCompleted: 'Completed',
             calStateFailed: 'Failed',
+
+            // Angular Calibration
+            angularCalibration: 'Angular Calibration',
+            angCalState: 'State',
+            angCalPoints: 'Points',
+            angCalResult: 'Result',
+            angCalCollecting: 'Collecting',
+            angCalCompleted: 'Completed',
+            angCalIdle: 'Idle',
+
+            saveAsDefault: 'Save as default settings',
+            resetDefault: 'Reset default settings',
+            saveInitConfirm: 'Save current settings as default?\n\nThey will be automatically loaded on server start.',
+            resetInitConfirm: 'Delete init.cmd?\n\nServer will start with defaults on next launch.',
+            savingInit: 'Saving init.cmd...',
+            initSaved: '✓ Settings saved as init.cmd. They will load on next start.',
+            saveFailed: '✗ Save failed',
+            deletingInit: 'Deleting init.cmd...',
+            initDeleted: '✓ init.cmd deleted. Next start will use factory defaults.',
+            deleteFailed: '✗ Delete failed',
+            noAddresses: '(no addresses)',
+            addresses: 'addresses: ',
+            addressesCount: 'addresses: ',
         },
         ru: {
-            // Интерфейс
+            // Interface
             beacons: 'Маяки',
             log: 'Журнал',
             noBeacons: 'Нет маяков',
@@ -114,74 +135,74 @@ const i18n = {
             control: 'Управление',
             expandHint: '▼ нажмите ▼',
 
-            // Разделы
+            // Sections
             position: '📍 ПОЗИЦИЯ',
             orientation: '🧭 ОРИЕНТАЦИЯ',
             environment: '🌊 СРЕДА',
             status: '📊 СТАТУС',
+            pause: 'ПАУЗА',
 
-            // Параметры
-            x: 'X',
-            y: 'Y',
-            z: 'Z',
-            lat: 'Широта',
-            lon: 'Долгота',
-            heading: 'Курс',
-            course: 'Направление',
-            speed: 'Скорость',
-            pitch: 'Дифферент',
-            roll: 'Крен',
-            depth: 'Глубина',
-            temperature: 'Темп',
-            pressure: 'Давление',
-            rError: 'Ошибка',
-            dataAge: 'Возраст',
-            distance: 'Дистанция',
-            azimuth: 'Азимут',
-            signal: 'Сигнал',
-            battery: 'Батарея',
-            elevation: 'В. угол',
-            proptime: 'Время',
-            absaz: 'Абс. Азимут',
-            absdist: 'Абс. Дист.',
-            success: 'Успешно',
-            requests: 'Запросов',
+            // Parameters
+            x: 'X', y: 'Y', z: 'Z',
+            lat: 'Широта', lon: 'Долгота',
+            heading: 'Курс', course: 'Направление', speed: 'Скорость',
+            pitch: 'Дифферент', roll: 'Крен',
+            depth: 'Глубина', temperature: 'Темп', pressure: 'Давление',
+            rError: 'Ошибка', dataAge: 'Возраст',
+            distance: 'Дистанция', azimuth: 'Азимут', signal: 'Сигнал',
+            battery: 'Батарея', elevation: 'В. угол',
+            proptime: 'Время', absaz: 'Абс. Азимут', absdist: 'Абс. Дист.',
+            success: 'Успешно', requests: 'Запросов',
 
-            // Единицы измерения
-            meter: 'м',
-            meterPerSec: 'м/с',
-            degree: '°',
-            celsius: '°C',
-            mbar: 'мБар',
-            second: 'с',
+            // Units
+            meter: 'м', meterPerSec: 'м/с', degree: '°', celsius: '°C',
+            mbar: 'мБар', second: 'с',
 
-            // Статусы маяков
-            active: 'АКТИВНО',
-            warning: 'ВНИМАНИЕ',
-            timeout: 'ТАЙМАУТ',
+            // Beacon statuses
+            active: 'АКТИВНО', warning: 'ВНИМАНИЕ', timeout: 'ТАЙМАУТ',
 
-            // Кнопки
-            zoomIn: 'Приблизить',
-            zoomOut: 'Отдалить',
-            reset: 'Сброс',
-            autoScale: 'Автомасштаб',
-            open: 'Открыть',
-            close: 'Закрыть',
-            interrogate: 'Опрос',
-            pause: 'Пауза',
+            // Map buttons
+            zoomIn: 'Приблизить', zoomOut: 'Отдалить',
+            reset: 'Сброс', autoScale: 'Автомасштаб',
 
-            // Статусы
-            mode: 'Режим',
-            interrogation: 'Опрос',
+            // Control buttons
+            open: 'Открыть', close: 'Закрыть',
+            interrogate: 'Опрос', pause: 'Пауза',
 
-            // Команды
+            // Commands
             sending: 'Отправка',
-            commandSent: 'Команда отправлена',
+            send: 'Отправить',
             commandDone: 'Команда выполнена',
             error: 'Ошибка',
             wait: 'Подождите, команда выполняется...',
 
-            // Калибровка
+            // Settings modal
+            settings: '⚙️ Настройки',
+            portsTitle: '🔌 Порты',
+            outputTitle: '📤 Вывод',
+            positionTitle: '📍 Позиция',
+            transceiverTitle: '📡 Трансивер',
+            applyAll: 'Применить всё',
+            applyRestart: 'Применить и перезапустить',
+            cancel: 'Отмена',
+            disableOverride: 'Отключить переопределение',
+            serialOutput: 'Посл.',
+            udpOutput: 'UDP',
+            psimssbOutput: 'Вывод PSIMSSB',
+            transceiverHint: 'Изменения отправляются при Apply & Restart.',
+            mask: 'Маска',
+            salinity: 'Солёность',
+            maxDist: 'Макс. дист.',
+            soundSpeed: 'Скор. звука',
+            offsets: 'Смещения антенны',
+            locationOverride: 'Переопределение позиции',
+            overrideHint: 'Пустые поля = отключить.',
+
+            // Validation
+            invalidNumber: 'неверное число',
+            mustBeRange: 'должно быть',
+
+            // Calibration
             calibration: 'Калибровка',
             calStart: 'Старт',
             calStop: 'Стоп',
@@ -196,58 +217,89 @@ const i18n = {
             calStateMeasuring: 'Измерение',
             calStateCompleted: 'Завершено',
             calStateFailed: 'Ошибка',
+
+            // Angular Calibration
+            angularCalibration: 'Угловая калибровка',
+            angCalState: 'Состояние',
+            angCalPoints: 'Точек',
+            angCalResult: 'Результат',
+            angCalCollecting: 'Сбор данных',
+            angCalCompleted: 'Завершено',
+            angCalIdle: 'Ожидание',
+
+            saveAsDefault: 'Сохранить как настройки по умолчанию',
+            resetDefault: 'Сбросить настройки по умолчанию',
+            saveInitConfirm: 'Сохранить текущие настройки как настройки по умолчанию?\n\nОни будут автоматически загружаться при старте сервера.',
+            resetInitConfirm: 'Удалить init.cmd?\n\nПри следующем старте сервер запустится с настройками по умолчанию.',
+            savingInit: 'Сохраняю init.cmd...',
+            initSaved: '✓ Настройки сохранены как init.cmd. Они загрузятся при следующем старте.',
+            saveFailed: '✗ Ошибка сохранения',
+            deletingInit: 'Удаляю init.cmd...',
+            initDeleted: '✓ init.cmd удалён. Следующий старт — с настройками по умолчанию.',
+            deleteFailed: '✗ Ошибка удаления',
+            noAddresses: '(нет адресов)',
+            addresses: 'адреса: ',
+            addressesCount: 'адресов: ',
         }
     },
 
-    // Получить перевод
     t: function (key) {
         return this.translations[this.currentLang][key] || key;
     },
 
-    // Обновить статические элементы интерфейса
     updateStaticUI: function () {
-        // Заголовки панелей
+        const t = (key) => this.t(key);
+
         const beaconsHeader = document.querySelector('#beacons-panel h3');
-        if (beaconsHeader) beaconsHeader.innerHTML = `📡 ${this.t('beacons')}`;
+        if (beaconsHeader) beaconsHeader.innerHTML = `📡 ${t('beacons')}`;
 
         const logsHeader = document.querySelector('#logs-panel h4');
-        if (logsHeader) logsHeader.innerHTML = `📋 ${this.t('log')}`;
+        if (logsHeader) logsHeader.innerHTML = `
+    <span>📋 ${t('log')}</span>
+    <span style="font-size:11px; font-weight:normal;">
+        <a href="/api/logs/current" download title="Download current log" style="color:#4a90e2; text-decoration:none;">📄</a>
+        <a href="/api/logs" download title="Download all logs (ZIP)" style="color:#4a90e2; text-decoration:none; margin-left:6px;">📦</a>
+    </span>`;
 
         const controlHeader = document.querySelector('#control-panel h4');
-        if (controlHeader) controlHeader.innerHTML = `🎮 ${this.t('control')}`;
+        if (controlHeader) controlHeader.innerHTML = `🎮 ${t('control')}`;
 
-        // Кнопки (text и title атрибуты)
+        const beaconsList = document.getElementById('beacons-list');
+        if (beaconsList && beaconsList.textContent.trim() === 'No beacons detected') {
+            beaconsList.textContent = t('noBeacons');
+        }
+
+        const logsList = document.getElementById('logs-list');
+        if (logsList && logsList.children.length === 0) {
+            if (!logsList.querySelector('.empty-placeholder')) {
+                const placeholder = document.createElement('div');
+                placeholder.className = 'empty-placeholder';
+                placeholder.style.cssText = 'color:#888; padding:10px; text-align:center;';
+                placeholder.textContent = t('noLogs');
+                logsList.appendChild(placeholder);
+            }
+        }
+
         const zoomIn = document.getElementById('zoom-in');
-        if (zoomIn) {
-            zoomIn.title = this.t('zoomIn');
-        }
-
+        if (zoomIn) zoomIn.title = t('zoomIn');
         const zoomOut = document.getElementById('zoom-out');
-        if (zoomOut) {
-            zoomOut.title = this.t('zoomOut');
-        }
-
+        if (zoomOut) zoomOut.title = t('zoomOut');
         const resetView = document.getElementById('reset-view');
-        if (resetView) {
-            resetView.textContent = this.t('reset');
-            resetView.title = this.t('reset');
+        if (resetView) resetView.textContent = t('reset');
+        const autoScale = document.getElementById('auto-scale-btn');
+        if (autoScale) autoScale.title = t('autoScale');
+
+        const sendBtn = document.getElementById('cmd-send-btn');
+        if (sendBtn) sendBtn.textContent = t('send');
+        const settingsBtn = document.getElementById('settings-btn');
+        if (settingsBtn) settingsBtn.title = t('settings');
+
+        const calState = document.getElementById('cal-state');
+        if (calState && (!calState.textContent || calState.textContent === '-')) {
+            calState.textContent = t('calStateIdle');
         }
 
-        const autoScaleBtn = document.getElementById('auto-scale-btn');
-        if (autoScaleBtn) {
-            autoScaleBtn.title = this.t('autoScale');
-        }
-
-        // Кнопки управления (изначально на русском, но обновятся при смене языка)
-        const connText = document.getElementById('connection-btn-text');
-        const interText = document.getElementById('interrogation-btn-text');
-        if (connText) {
-            // Не трогаем, они обновляются в updateControlButtons()
-        }
+        const angCalHeader = document.querySelector('#angular-calibration-panel h4');
+        if (angCalHeader) angCalHeader.innerHTML = `🔄 ${t('angularCalibration')}`;
     }
 };
-
-// Инициализация при загрузке
-document.addEventListener('DOMContentLoaded', function () {
-    i18n.updateStaticUI();
-});
