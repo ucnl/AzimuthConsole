@@ -1,16 +1,8 @@
-﻿
+﻿// Program.cs
 using AzimuthConsole;
 
 internal class Program
 {
-    public enum ConsoleLogOptions
-    {
-        Enabled,
-        Errors_only,
-        Disabled,
-        Invalid
-    }    
-
     private static async Task Main(string[] args)
     {
         var isDaemonMode = args.Contains("daemon") || args.Contains("DAEMON");
@@ -25,12 +17,8 @@ internal class Program
 
         try
         {
-            app.Initialize(args);
-
-            if (isDaemonMode)
-                await app.RunDaemonMode();
-            else
-                await app.RunInteractiveMode();
+            await app.InitializeAsync(args);
+            await app.RunAsync();
         }
         catch (Exception ex)
         {
@@ -38,7 +26,7 @@ internal class Program
         }
         finally
         {
-            app.Dispose();
+            await app.DisposeAsync();
         }
     }
 }
