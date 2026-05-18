@@ -1,4 +1,4 @@
-// AzimuthConsole/Contexts/InitContext.cs
+﻿// AzimuthConsole/Contexts/InitContext.cs
 using AzimuthConsole.Commands;
 
 namespace AzimuthConsole.Contexts
