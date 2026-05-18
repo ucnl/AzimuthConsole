@@ -215,6 +215,7 @@ namespace AzimuthConsole
                 _logger?.Write("[WEB] Server started on port 8080");
 
                 _azmManager.OnLineGenerated += line => _webServer?.Broadcast(line);
+                _azmPort.DeviceInfoValidChanged += (_, _) => { _webServer?.Broadcast("!DINFO_UPDATED"); };
             }
 
             await TryLoadInitScript();
@@ -642,6 +643,7 @@ namespace AzimuthConsole
                 ["antenna_y"] = AntennaYOffset.ToString("F2"),
                 ["antenna_phi"] = AntennaPhi.ToString("F1"),
                 ["device_type"] = _azmManager?.DeviceType.ToString() ?? "unknown",
+                ["serial_number"] = _azmPort?.SerialNumber ?? "",
                 ["location_override"] = LocationOverrideActive.ToString(),
             };
         }

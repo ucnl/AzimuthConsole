@@ -539,6 +539,11 @@ function handleAzimuthLine(line) {
     if (typeof line !== 'string') return;
     line = line.trim();
 
+    if (line === '!DINFO_UPDATED') {
+        requestSystemInfo();
+        return;
+    }
+
     addLogEntry(line);
 
     if (line.startsWith('@AZMREM,')) {
@@ -610,6 +615,7 @@ function handleCommandResponse(line) {
                 else if (p.startsWith('antenna_y=')) currentSettings.offsY = p.split('=')[1];
                 else if (p.startsWith('antenna_phi=')) currentSettings.offsPhi = p.split('=')[1];
                 else if (p.startsWith('device_type=')) currentMode = p.split('=')[1].toLowerCase();
+                else if (p.startsWith('serial_number=')) systemInfo.serialNumber = p.split('=')[1];
             }
             updateSystemInfo();
         }
@@ -1507,6 +1513,9 @@ function updateSystemInfo() {
 
     html += `<div class="sys-header">`;
     html += `<strong>${currentMode.toUpperCase()}</strong> `;
+    if (systemInfo?.serialNumber) {
+        html += `<div style="font-size:9px; color:#888;">S/N: ${systemInfo.serialNumber}</div>`;
+    }
 
     const localAge = localDevice?.dataAge ?? 0;
     let ageColor = '#28a745';
