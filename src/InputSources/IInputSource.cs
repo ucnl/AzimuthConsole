@@ -1,4 +1,4 @@
-// AzimuthConsole/InputSources/IInputSource.cs
+﻿// AzimuthConsole/InputSources/IInputSource.cs
 using AzimuthConsole.Commands;
 
 namespace AzimuthConsole.InputSources
