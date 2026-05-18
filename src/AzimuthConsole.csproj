@@ -21,6 +21,7 @@
 	<BuildNumber Condition=" '$(BuildNumber)' == '' ">$([System.DateTime]::Now.ToString("HHmm"))</BuildNumber>
 	<Version>$(MajorVersion).$(MinorVersion).$(PatchVersion).$(BuildNumber)</Version>
 	<LangVersion>12.0</LangVersion>
+        <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
   </PropertyGroup>
 
 
