@@ -1,4 +1,4 @@
-// Commands/CommandMeta.cs
+﻿// Commands/CommandMeta.cs
 namespace AzimuthConsole.Commands
 {
     public class CommandMeta
