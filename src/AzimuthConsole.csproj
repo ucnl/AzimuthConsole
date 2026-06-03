@@ -34,8 +34,8 @@
 	<EmbeddedResource Include="wwwroot\**">
 		<LogicalName>AzimuthConsole.wwwroot.%(RecursiveDir)%(Filename)%(Extension)</LogicalName>
 	</EmbeddedResource>
-	<PackageReference Include="AZMLib" Version="1.1.10" />
-	<PackageReference Include="UCNLDrivers" Version="1.1.3" />
+	<PackageReference Include="AZMLib" Version="1.1.11" />
+	<PackageReference Include="UCNLDrivers" Version="1.1.4" />
      <PackageReference Include="UCNLPhysics" Version="1.0.0" />
 	 <PackageReference Include="UCNLMan" Version="1.0.1" />
 	 <PackageReference Include="UCNLNav" Version="1.0.1" />
