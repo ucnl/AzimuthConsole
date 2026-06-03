@@ -751,8 +751,6 @@ namespace AzimuthConsole.Commands
             });
         }
 
-
-
         private static void RegisterConnectionCommands(CommandRouter router, ApplicationRuntime runtime)
         {
             router.Register(new CommandMeta

@@ -261,6 +261,7 @@ function init() {
     initTouchHandlers();
     connectWebSocket();
     requestSystemInfo();
+    fetchVersion();
 
     startAgeUpdateTimer();
 
@@ -591,6 +592,17 @@ function handleCommandResponse(line) {
     if (status === 'OK') {
         showCommandStatus(`${cmdId}: OK`, 'success');
 
+
+        if (cmdId === 'VER') {
+            const verPart = parts.find(p => p.startsWith('version='));
+            if (verPart) {
+                appVersion = verPart.split('=')[1];
+                console.log('[VER] Получена версия:', appVersion);
+                updateFooterVersion();
+            }
+            return;
+        }
+
         if (cmdId === 'CNA?') {
             const active = parts.find(p => p.startsWith('active='))?.split('=')[1];
             if (!systemInfo) systemInfo = {};
@@ -813,7 +825,7 @@ function updateControlButtons() {
     // Кнопка соединения — всегда enabled
     if (btnConnection && connText) {
         btnConnection.disabled = false;
-        if (systemInfo.connectionActive) {
+        if (systemInfo && systemInfo.connectionActive) {  // <-- проверка на null
             connText.textContent = i18n.t('close');
             btnConnection.className = 'ctrl-btn disconnect';
             btnConnection.querySelector('.btn-icon').textContent = '🔌';
@@ -826,8 +838,8 @@ function updateControlButtons() {
 
     // Кнопка опроса — enabled только когда соединение активно
     if (btnInterrogation && interText) {
-        btnInterrogation.disabled = !systemInfo.connectionActive;
-        if (systemInfo.interrogationActive) {
+        btnInterrogation.disabled = !(systemInfo && systemInfo.connectionActive);  // <-- проверка
+        if (systemInfo && systemInfo.interrogationActive) {  // <-- проверка
             interText.textContent = i18n.t('pause');
             btnInterrogation.className = 'ctrl-btn stop';
             btnInterrogation.querySelector('.btn-icon').textContent = '⏸';
@@ -2626,6 +2638,51 @@ function applySuggestionText(input, text, isCommand) {
     input.setSelectionRange(input.value.length, input.value.length);
 }
 
+// ========== ВЕРСИЯ ПРИЛОЖЕНИЯ ==========
+
+let appVersion = '';
+let versionFetched = false;
+
+function fetchVersion() {
+    if (versionFetched) return;
+
+    if (!ws || ws.readyState === WebSocket.CONNECTING) {
+        console.log('[VER] WS в состоянии CONNECTING, ждём...');
+        setTimeout(fetchVersion, 500);
+        return;
+    }
+
+    if (ws.readyState !== WebSocket.OPEN) {
+        console.log('[VER] WS не открыт (state=' + ws.readyState + ')');
+        return;
+    }
+
+    versionFetched = true;
+    console.log('[VER] Отправляем VER');
+    ws.send('VER');
+    addLogEntry('>> VER');
+}
+
+function updateFooterVersion() {
+    const footer = document.getElementById('footer-panel');
+    if (!footer) return;
+
+    if (document.getElementById('app-version')) return;
+
+    const copyrightDiv = footer.querySelector('div:last-child');
+    if (!copyrightDiv) return;
+
+    const versionLink = document.createElement('a');
+    versionLink.id = 'app-version';
+    versionLink.href = 'https://github.com/ucnl/AzimuthConsole/blob/main/src/changelog.md';
+    versionLink.target = '_blank';
+    versionLink.rel = 'noopener';
+    versionLink.style.cssText = 'color: #4a90e2; text-decoration: none; font-weight: bold; margin-right: 6px;';
+    versionLink.title = 'История изменений';
+    versionLink.textContent = `${appVersion}`;
+
+    copyrightDiv.insertBefore(versionLink, copyrightDiv.firstChild);
+}
 
 
 

@@ -129,8 +129,7 @@ namespace AzimuthConsole.Commands
             return dict;
         }
 
-        // В класс CommandRouter добавить:
-
+        
         public string GetHelpJson()
         {
             var commands = _meta.Values
