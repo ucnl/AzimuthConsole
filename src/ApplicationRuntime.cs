@@ -44,6 +44,7 @@ namespace AzimuthConsole
         private LogPlayer? _logPlayer;
 
         private bool _webLogCommands = false;
+        private readonly Dictionary<string, EventHandler<LogEventArgs>> _logHandlers = new();
 
         #endregion
 
@@ -124,7 +125,6 @@ namespace AzimuthConsole
             AppDomain.CurrentDomain.UnhandledException += (s, e) =>
                 _logger.Write($"FATAL: {e.ExceptionObject}");
 
-
             _router.OnLog += line =>
             {
                 // Не пишем веб-команды в лог (они слишком частые)
@@ -160,7 +160,8 @@ namespace AzimuthConsole
             _auxData = new AuxDataProvider(_auxManager);
             _azmManager = new AZMManager(_azmPort, _azmSettings, _outputSettings, _auxData);
             _azmManager.LogEventHandler += (_, e) => _logger?.Write($"[AZM] {e.EventType}: {e.LogString}");
-            _azmManager.InterrogationActiveChangedHandler += (_, _) => _logger?.Write($"[AZM] Interrogation: {_azmManager.InterrogationActive}");            
+            _azmManager.InterrogationActiveChangedHandler += (_, _) => _logger?.Write($"[AZM] Interrogation: {_azmManager.InterrogationActive}");
+            //_azmManager.OnLineGenerated += line => _logger?.WriteSilent($"[OUT] {line}");
 
             // Калибровочная таблица
             if (!string.IsNullOrEmpty(_appSettings.AntennaCalibrationTableFile))
@@ -178,8 +179,29 @@ namespace AzimuthConsole
                 }
             }
 
-            // Логирование статусов портов
-            _auxManager.OnSourceStatusChanged += (_, e) => _logger?.Write($"[PORT] {e.Info.Id}: {e.Info.Status}");
+            // Логирование статусов портов           
+            _auxManager.OnSourceStatusChanged += (_, e) =>
+            {
+                _logger?.Write($"[PORT] {e.Info.Id}: {e.Info.Status}");
+
+                if (e.Info.Id == "azm") return;
+
+                if (e.Info.Status == AuxStatus.Detected)
+                {
+                    var source = _auxManager.GetSource(e.Info.Id);
+                    if (source is uAuxPort port)
+                    {
+                        if (_logHandlers.TryGetValue(e.Info.Id, out var oldHandler))
+                            port.LogEventHandler -= oldHandler;
+
+                        EventHandler<LogEventArgs> handler = (s, args) =>
+                        _logger?.Write($"[{e.Info.Id.ToUpper()}] {args.EventType}: {args.LogString}");
+
+                        _logHandlers[e.Info.Id] = handler;
+                        port.LogEventHandler += handler;
+                    }
+                }
+            };
 
             if (_appSettings.WebServerEnabled)
             {
@@ -212,11 +234,20 @@ namespace AzimuthConsole
 );
 
                 _webServer?.Start();
-                _logger?.Write("[WEB] Server started on port 8080");
-
-                _azmManager.OnLineGenerated += line => _webServer?.Broadcast(line);
+                _logger?.Write("[WEB] Server started on port 8080");                
                 _azmPort.DeviceInfoValidChanged += (_, _) => { _webServer?.Broadcast("!DINFO_UPDATED"); };
             }
+
+            _azmManager.OnLineGenerated += line => _webServer?.Broadcast(line);
+            _azmManager.OnOutputSent += (channelId, data) =>
+            {
+                if (channelId == "websocket" && !_webLogCommands)
+                    return;
+
+                _logger?.Write($"[OUT→{channelId}] {data}");
+            };
+
+
 
             await TryLoadInitScript();
 
@@ -450,10 +481,21 @@ namespace AzimuthConsole
 
         public async Task ConnectAsync()
         {
-            if (_auxSettings.ActivationOrder.Count > 0)
-                _auxManager?.ActivateChain(_auxSettings.ActivationOrder.ToArray());
-            else
-                _auxManager?.Activate("azm");
+            var chain = new List<string>();
+
+            if (_auxManager?.GetSource("azm") != null)
+                chain.Add("azm");
+            if (_auxManager?.GetSource("aux1") != null)
+                chain.Add("aux1");
+            if (_auxManager?.GetSource("aux2") != null)
+                chain.Add("aux2");
+            if (_auxManager?.GetSource("rdt") != null)
+                chain.Add("rdt");
+
+            if (chain.Count == 1)
+                _auxManager?.Activate(chain[0]);
+            else if (chain.Count > 1)
+                _auxManager?.ActivateChain(chain.ToArray());
 
             _logger?.Write("[APP] Connections opened");
         }
@@ -461,7 +503,7 @@ namespace AzimuthConsole
         public async Task DisconnectAsync()
         {
             _azmManager?.Disconnect();
-            _auxManager?.Deactivate("azm");
+            //_auxManager?.Deactivate("azm");
             _auxManager?.Deactivate("aux1");
             _auxManager?.Deactivate("aux2");
             _logger?.Write("[APP] Connections closed");

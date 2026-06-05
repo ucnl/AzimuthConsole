@@ -592,7 +592,6 @@ function handleCommandResponse(line) {
     if (status === 'OK') {
         showCommandStatus(`${cmdId}: OK`, 'success');
 
-
         if (cmdId === 'VER') {
             const verPart = parts.find(p => p.startsWith('version='));
             if (verPart) {
@@ -602,6 +601,45 @@ function handleCommandResponse(line) {
             }
             return;
         }
+
+        // === СОХРАНЕНИЕ НАСТРОЕК ПОРТОВ ===
+        if (cmdId === 'AZM') {
+            const baudPart = parts.find(p => p.startsWith('baud='));
+            if (baudPart && portStatuses.azm) portStatuses.azm.baud = baudPart.split('=')[1];
+            const portPart = parts.find(p => p.startsWith('port='));
+            if (portPart && portStatuses.azm) portStatuses.azm.port = portPart.split('=')[1] || 'AUTO';
+        }
+        else if (cmdId === 'AUX1') {
+            const baudPart = parts.find(p => p.startsWith('baud='));
+            if (baudPart && portStatuses.aux1) portStatuses.aux1.baud = baudPart.split('=')[1];
+            const protoPart = parts.find(p => p.startsWith('proto='));
+            if (protoPart && portStatuses.aux1) portStatuses.aux1.proto = protoPart.split('=')[1];
+            const portPart = parts.find(p => p.startsWith('port='));
+            if (portPart && portStatuses.aux1) portStatuses.aux1.port = portPart.split('=')[1] || 'AUTO';
+        }
+        else if (cmdId === 'AUX2') {
+            const baudPart = parts.find(p => p.startsWith('baud='));
+            if (baudPart && portStatuses.aux2) portStatuses.aux2.baud = baudPart.split('=')[1];
+            const portPart = parts.find(p => p.startsWith('port='));
+            if (portPart && portStatuses.aux2) portStatuses.aux2.port = portPart.split('=')[1] || 'AUTO';
+        }
+        else if (cmdId === 'RDT') {
+            const baudPart = parts.find(p => p.startsWith('baud='));
+            if (baudPart && portStatuses.rdt) portStatuses.rdt.baud = baudPart.split('=')[1];
+            const portPart = parts.find(p => p.startsWith('port='));
+            if (portPart && portStatuses.rdt) portStatuses.rdt.port = portPart.split('=')[1] || 'AUTO';
+        }
+        else if (cmdId === 'OUTS') {
+            const portPart = parts.find(p => p.startsWith('port='));
+            if (portPart && portStatuses.outs) portStatuses.outs.port = portPart.split('=')[1];
+            const baudPart = parts.find(p => p.startsWith('baud='));
+            if (baudPart && portStatuses.outs) portStatuses.outs.baud = baudPart.split('=')[1];
+        }
+        else if (cmdId === 'OUTU') {
+            const addrPart = parts.find(p => p.startsWith('addr='));
+            if (addrPart && portStatuses.outu) portStatuses.outu.addr = addrPart.split('=')[1];
+        }
+        // === КОНЕЦ СОХРАНЕНИЯ НАСТРОЕК ПОРТОВ ===
 
         if (cmdId === 'CNA?') {
             const active = parts.find(p => p.startsWith('active='))?.split('=')[1];
@@ -640,7 +678,6 @@ function handleCommandResponse(line) {
             if (id === 'AUX2') systemInfo.aux2Detected = detected === 'TRUE';
         }
         else if (cmdId === 'CAL?') {
-            // Поворотная калибровка
             const calData = {};
             for (const p of parts) {
                 if (p.startsWith('state=')) calData.state = p.split('=')[1];
@@ -650,7 +687,6 @@ function handleCommandResponse(line) {
             }
             updateCalibrationPanel(calData);
 
-            // Угловая калибровка
             const acalData = {};
             for (const p of parts) {
                 if (p.startsWith('acal_state=')) acalData.state = p.split('=')[1];
@@ -670,9 +706,14 @@ function handleCommandResponse(line) {
                     const id = info[0];
                     const portName = info[1] || 'AUTO';
                     const status = info[2] || 'Inactive';
+                    const baud = info[3] || '';
+                    const proto = info[4] || '';
+
                     if (portStatuses[id]) {
                         portStatuses[id].port = portName === 'N/A' ? 'AUTO' : (portName || 'AUTO');
                         portStatuses[id].status = status;
+                        if (baud) portStatuses[id].baud = baud;
+                        if (proto && id === 'aux1') portStatuses[id].proto = proto;
                     }
                 }
             }
@@ -702,7 +743,6 @@ function handleCommandResponse(line) {
         showCommandStatus(`${cmdId}: ${msg}`, 'error');
     }
 }
-
 function updateSystemInfoFromStats(parts) {
     if (!systemInfo) systemInfo = {};
     for (const p of parts) {
@@ -905,6 +945,8 @@ function updateCalibrationPanel(calData) {
             angleEl.textContent = '--';
         }
     }
+
+    repositionInfoPanels();
 }
 
 function updateAngularCalibrationPanel(acalData) {
@@ -948,6 +990,8 @@ function updateAngularCalibrationPanel(acalData) {
             phiEl.style.color = '#aaa';
         }
     }
+
+    repositionInfoPanels();
 }
 
 function updatePortsInfo(parts) {
@@ -970,11 +1014,8 @@ function updatePortsInfo(parts) {
             const portName = info[1] || '?';
             const status = info[2] || '?';
 
-            // Обновляем portStatuses для формы настроек
-            if (portStatuses[id]) {
-                portStatuses[id].port = (portName === 'N/A' || portName === '?') ? 'AUTO' : portName;
-                portStatuses[id].status = status;
-            }
+            // Пропускаем rctrl в панели портов (он не порт)
+            if (id === 'rctrl') continue;
 
             const icon = status === 'Detected' ? '✓' : status === 'Active' ? '↻' : '○';
             const color = status === 'Detected' ? '#4caf50' : status === 'Active' ? '#ff9800' : '#999';
@@ -982,8 +1023,15 @@ function updatePortsInfo(parts) {
         }
     }
 
+    // Если только rctrl — скрыть панель
+    if (html.indexOf('</div>', html.indexOf('PORTS</div>')) === -1) {
+        panel.style.display = 'none';
+        return;
+    }
+
     panel.innerHTML = html;
     panel.style.display = 'block';
+    repositionInfoPanels();
 }
 
 // ========== ОТРИСОВКА ==========
@@ -1587,6 +1635,7 @@ function updateSystemInfo() {
     panel.innerHTML = html;
 
     updateControlButtons();
+    repositionInfoPanels();
 }
 
 function updateBeaconsList(beacons) {
@@ -1720,18 +1769,21 @@ function validateAll() {
 
 function openSettings() {
     document.getElementById('settings-modal').style.display = 'flex';
-
-    // Сначала показать форму с ТЕКУЩИМИ значениями (которые уже есть в currentSettings)
-    document.getElementById('tab-content').innerHTML = renderAllSettings();
-    fillPortSelectors();
-
     document.getElementById('settings-title').textContent = i18n.t('settings');
     document.getElementById('btn-apply-all').textContent = i18n.t('applyAll');
     document.getElementById('btn-cancel').textContent = i18n.t('cancel');
 
-    // Запросить свежие данные и ОБНОВИТЬ форму когда придут
+    // Показать загрузку вместо старой формы
+    document.getElementById('tab-content').innerHTML =
+        '<div style="padding:20px;text-align:center;color:#999;">Loading settings...</div>';
+
+    // Запросить актуальные настройки — форма обновится когда придут ответы
     if (ws && ws.readyState === WebSocket.OPEN) {
         requestSettingsAndUpdateForm();
+    } else {
+        // Нет соединения — показываем что есть
+        document.getElementById('tab-content').innerHTML = renderAllSettings();
+        fillPortSelectors();
     }
 }
 
@@ -1740,18 +1792,16 @@ function requestSettingsAndUpdateForm() {
 
     const originalHandler = ws.onmessage;
     let responseCount = 0;
-    const expectedResponses = 2; // STAT + PORTS
+    const expectedResponses = 2;
 
     ws.onmessage = function (event) {
         const msg = event.data;
 
-        // Пропускаем широковещательные сообщения (beacons, local device)
         if (typeof msg === 'string' && msg.startsWith('@')) {
             handleAzimuthLine(msg);
             return;
         }
 
-        // Обрабатываем STAT и PORTS
         if (typeof msg === 'string') {
             const line = msg.trim();
             addLogEntry(line);
@@ -1761,7 +1811,6 @@ function requestSettingsAndUpdateForm() {
                 responseCount++;
 
                 if (responseCount >= expectedResponses) {
-                    // Все ответы получены — обновляем форму
                     ws.onmessage = originalHandler;
                     document.getElementById('tab-content').innerHTML = renderAllSettings();
                     fillPortSelectors();
@@ -1775,73 +1824,18 @@ function requestSettingsAndUpdateForm() {
     ws.send('STAT');
     ws.send('PORTS');
 
-    // Таймаут — восстановить обработчик если ответ не пришёл
     setTimeout(() => {
         if (ws.onmessage !== originalHandler) {
             ws.onmessage = originalHandler;
+            // Обновить форму в любом случае
+            document.getElementById('tab-content').innerHTML = renderAllSettings();
+            fillPortSelectors();
         }
-    }, 3000);
+    }, 5000);
 }
 
 function closeSettings() {
     document.getElementById('settings-modal').style.display = 'none';
-}
-
-async function applySettings() {
-    const commands = [];
-
-    // AZM
-    const azmPort = document.getElementById('cfg-azm-port')?.value;
-    const azmBaud = document.getElementById('cfg-azm-baud')?.value;
-    if (azmPort !== undefined) {
-        commands.push({ cmd: 'AZM', params: { port: azmPort || 'AUTO', baud: azmBaud } });
-    }
-
-    // AUX1
-    const aux1Proto = document.getElementById('cfg-aux1-proto')?.value;
-    const aux1Port = document.getElementById('cfg-aux1-port')?.value;
-    const aux1Baud = document.getElementById('cfg-aux1-baud')?.value;
-    if (aux1Port === 'OFF') {
-        commands.push({ cmd: 'AUX1', params: { port: 'OFF' } });
-    } else if (aux1Proto) {
-        commands.push({ cmd: 'AUX1', params: { proto: aux1Proto, port: aux1Port || 'AUTO', baud: aux1Baud } });
-    }
-
-    // AUX2
-    const aux2Port = document.getElementById('cfg-aux2-port')?.value;
-    const aux2Baud = document.getElementById('cfg-aux2-baud')?.value;
-    if (aux2Port === 'OFF') {
-        commands.push({ cmd: 'AUX2', params: { port: 'OFF' } });
-    } else if (aux2Port !== undefined) {
-        commands.push({ cmd: 'AUX2', params: { port: aux2Port || 'AUTO', baud: aux2Baud } });
-    }
-
-    // RDT
-    const rdtPort = document.getElementById('cfg-rdt-port')?.value;
-    const rdtBaud = document.getElementById('cfg-rdt-baud')?.value;
-    if (rdtPort === 'OFF') {
-        commands.push({ cmd: 'RDT', params: { port: 'OFF' } });
-    } else if (rdtPort !== undefined) {
-        commands.push({ cmd: 'RDT', params: { port: rdtPort || 'AUTO', baud: rdtBaud } });
-    }
-
-    // Output
-    const outsPort = document.getElementById('cfg-outs-port')?.value;
-    const outsBaud = document.getElementById('cfg-outs-baud')?.value;
-    if (outsPort) commands.push({ cmd: 'OUTS', params: { port: outsPort, baud: outsBaud } });
-
-    const outuAddr = document.getElementById('cfg-outu-addr')?.value;
-    if (outuAddr) commands.push({ cmd: 'OUTU', params: { addr: outuAddr || 'OFF' } });
-
-    const psimssb = document.getElementById('cfg-psimssb')?.checked;
-    commands.push({ cmd: 'PSIMSSB', params: { on: psimssb ? 'TRUE' : 'FALSE' } });
-
-    for (const c of commands) {
-        await sendCommandAsync(c.cmd, c.params);
-        await sleep(200);
-    }
-
-    closeSettings();
 }
 
 function renderAllSettings() {
@@ -1994,9 +1988,12 @@ function renderTransceiverSection() {
 function fillPortSelectors() {
     const ports = ['COM1', 'COM2', 'COM3', 'COM4', 'COM5', 'COM6', 'COM7', 'COM8', 'COM9', 'COM10'];
     const ids = ['cfg-azm-port', 'cfg-aux1-port', 'cfg-aux2-port', 'cfg-rdt-port', 'cfg-outs-port'];
+
     ids.forEach(id => {
         const sel = document.getElementById(id);
         if (!sel) return;
+
+        // Добавить опции COM-портов
         ports.forEach(p => {
             if (!sel.querySelector(`option[value="${p}"]`)) {
                 sel.innerHTML += `<option value="${p}">${p}</option>`;
@@ -2004,7 +2001,45 @@ function fillPortSelectors() {
         });
     });
 
+    // Установить текущие значения из portStatuses
+    const azm = portStatuses.azm;
+    const aux1 = portStatuses.aux1;
+    const aux2 = portStatuses.aux2;
+    const rdt = portStatuses.rdt;
+    const outs = portStatuses.outs;
+
+    setSelectValue('cfg-azm-port', azm.port === 'AUTO' || !azm.port ? '' : azm.port);
+    setSelectValue('cfg-azm-baud', azm.baud || '9600');
+
+    setSelectValue('cfg-aux1-proto', aux1.proto || 'NMEA');
+    setSelectValue('cfg-aux1-port', aux1.port === 'AUTO' || !aux1.port ? '' : aux1.port);
+    setSelectValue('cfg-aux1-baud', aux1.baud || '115200');
+
+    setSelectValue('cfg-aux2-port', aux2.port === 'AUTO' || !aux2.port ? '' : aux2.port);
+    setSelectValue('cfg-aux2-baud', aux2.baud || '9600');
+
+    setSelectValue('cfg-rdt-port', rdt.port === 'AUTO' || !rdt.port ? '' : rdt.port);
+    setSelectValue('cfg-rdt-baud', rdt.baud || '9600');
+
+    setSelectValue('cfg-outs-port', outs.port === 'OFF' ? 'OFF' : (outs.port || 'OFF'));
+    setSelectValue('cfg-outs-baud', outs.baud || '9600');
+
+    // OUTU
+    const outuInput = document.getElementById('cfg-outu-addr');
+    if (outuInput && portStatuses.outu) {
+        outuInput.value = portStatuses.outu.addr || '';
+    }
+
     buildAddressCheckboxes();
+}
+
+// Вспомогательная функция
+function setSelectValue(id, value) {
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    if (value && sel.querySelector(`option[value="${value}"]`)) {
+        sel.value = value;
+    }
 }
 
 // ========== ВИЗУАЛЬНЫЙ ВЫБОР МАСКИ АДРЕСА ==========
@@ -2684,7 +2719,40 @@ function updateFooterVersion() {
     copyrightDiv.insertBefore(versionLink, copyrightDiv.firstChild);
 }
 
+function repositionInfoPanels() {
+    const sysInfo = document.getElementById('system-info');
+    const portsInfo = document.getElementById('ports-info');
+    const calPanel = document.getElementById('calibration-panel');
+    const acalPanel = document.getElementById('angular-calibration-panel');
 
+    if (!sysInfo) return;
+
+    const sysRect = sysInfo.getBoundingClientRect();
+    const mapContainer = document.getElementById('map-container');
+    if (!mapContainer) return;
+    const mapRect = mapContainer.getBoundingClientRect();
+
+    let top = sysRect.bottom - mapRect.top + 8;
+
+    // ports-info — только если видима
+    if (portsInfo && portsInfo.style.display !== 'none') {
+        portsInfo.style.top = top + 'px';
+        const portsRect = portsInfo.getBoundingClientRect();
+        top = portsRect.bottom - mapRect.top + 8;
+    }
+
+    // calibration-panel
+    if (calPanel && calPanel.style.display !== 'none') {
+        calPanel.style.top = top + 'px';
+        const calRect = calPanel.getBoundingClientRect();
+        top = calRect.bottom - mapRect.top + 8;
+    }
+
+    // angular-calibration
+    if (acalPanel && acalPanel.style.display !== 'none') {
+        acalPanel.style.top = top + 'px';
+    }
+}
 
 // Отладка
 window.debug = {

@@ -43,6 +43,23 @@ namespace AzimuthConsole
             };
         }
 
+        private void ReconfigurePort(string id, Action recreate)
+        {
+            var oldSource = _aux.GetSource(id);
+            bool wasActive = oldSource?.Status == AuxStatus.Active ||
+                             oldSource?.Status == AuxStatus.Detected;
+
+            _aux.Remove(id);
+            recreate();
+
+            if (wasActive)
+            {
+                var newSource = _aux.GetSource(id);
+                if (newSource != null && newSource.Status == AuxStatus.Inactive)
+                    _aux.Activate(id);
+            }
+        }
+
         #region Query
 
         private Task<CommandResult> QueryAsync(string id)
@@ -151,19 +168,21 @@ namespace AzimuthConsole
                 return CommandResult.Ok();
             }
 
-            _aux.Remove("aux1");
-
-            uAuxPort source = proto switch
+            ReconfigurePort("aux1", () =>
             {
-                "BP" => new uAuxBPPort("aux1", (BaudRate)int.Parse(baud!)),
-                _ => new uAuxGNSSPort("aux1", (BaudRate)int.Parse(baud!))
-            };
+                uAuxPort source = proto switch
+                {
+                    "BP" => new uAuxBPPort("aux1", (BaudRate)int.Parse(baud!)),
+                    _ => new uAuxGNSSPort("aux1", (BaudRate)int.Parse(baud!))
+                };
 
-            source.ProposedPortName = port?.ToUpper() == "AUTO" ? string.Empty : port;
-            source.IsTryAlways = true;
-            source.IsLogIncoming = true;
+                source.ProposedPortName = port?.ToUpper() == "AUTO" ? string.Empty : port;
+                source.IsTryAlways = true;
+                source.IsLogIncoming = true;
 
-            _aux.Register(source);            
+                _aux.Register(source);
+            });
+
             return CommandResult.Ok();
         }
 
@@ -182,16 +201,18 @@ namespace AzimuthConsole
                 return CommandResult.Ok();
             }
 
-            _aux.Remove("aux2");
-            var source = new uAuxGNSSPort("aux2", (BaudRate)int.Parse(baud!))
+            ReconfigurePort("aux2", () =>
             {
-                ProposedPortName = port?.ToUpper() == "AUTO" ? string.Empty : port,
-                Mode = GNSSMode.CompassOnly,
-                IsTryAlways = true,
-                IsLogIncoming = true
-            };
+                var source = new uAuxGNSSPort("aux2", (BaudRate)int.Parse(baud!))
+                {
+                    ProposedPortName = port?.ToUpper() == "AUTO" ? string.Empty : port,
+                    Mode = GNSSMode.CompassOnly,
+                    IsTryAlways = true,
+                    IsLogIncoming = true
+                };
+                _aux.Register(source);
+            });
 
-            _aux.Register(source);            
             return CommandResult.Ok();
         }
 
@@ -210,17 +231,18 @@ namespace AzimuthConsole
                 return CommandResult.Ok();
             }
 
-            _aux.Remove("rdt");
-
-            var source = new uAuxRadantPort("rdt", (BaudRate)int.Parse(baud!))
+            ReconfigurePort("rdt", () =>
             {
-                ProposedPortName = port?.ToUpper() == "AUTO" ? string.Empty : port,
-                IsTryAlways = true,
-                IsLogIncoming = true,
-                IsRawModeOnly = true
-            };
+                var source = new uAuxRadantPort("rdt", (BaudRate)int.Parse(baud!))
+                {
+                    ProposedPortName = port?.ToUpper() == "AUTO" ? string.Empty : port,
+                    IsTryAlways = true,
+                    IsLogIncoming = true,
+                    IsRawModeOnly = true
+                };
+                _aux.Register(source);
+            });
 
-            _aux.Register(source);            
             return CommandResult.Ok();
         }
 
@@ -336,11 +358,22 @@ namespace AzimuthConsole
         public IEnumerable<string> GetAllInfo()
         {
             foreach (var info in _aux.GetAllSources())
-                yield return $"{info.Id}|{info.PortName ?? "AUTO"}|{info.Status}";
+            {
+                var source = _aux.GetSource(info.Id);
+                var baud = (source as uAuxPort)?.Baudrate.ToString("D") ?? "";
+                var proto = info.Kind switch
+                {
+                    AuxSourceKind.GNSS => "NMEA",
+                    AuxSourceKind.Custom when info.Id == "azm" => "AZM",
+                    _ => ""
+                };
+
+                yield return $"{info.Id}|{info.PortName ?? "AUTO"}|{info.Status}|{baud}|{proto}";
+            }
 
             var rctrlStatus = _rctrlInEndpoint != null || _rctrlOutEndpoint != null
                 ? AuxStatus.Detected : AuxStatus.Inactive;
-            yield return $"rctrl|IN:{_rctrlInEndpoint?.Port.ToString() ?? ""}|OUT:{_rctrlOutEndpoint}|{rctrlStatus}";
+            yield return $"rctrl|IN:{_rctrlInEndpoint?.Port.ToString() ?? ""}|OUT:{_rctrlOutEndpoint}|{rctrlStatus}||";
         }
 
         #endregion

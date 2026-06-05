@@ -16,7 +16,7 @@
 
 	<MajorVersion>2</MajorVersion>
 	<MinorVersion>1</MinorVersion>
-	<PatchVersion>1</PatchVersion>	
+	<PatchVersion>2</PatchVersion>	
 	<BuildNumber Condition=" '$(BuildNumber)' == '' ">$([System.DateTime]::Now.ToString("HHmm"))</BuildNumber>
 	<Version>$(MajorVersion).$(MinorVersion).$(PatchVersion).$(BuildNumber)</Version>
 	  	  
@@ -34,8 +34,8 @@
 	<EmbeddedResource Include="wwwroot\**">
 		<LogicalName>AzimuthConsole.wwwroot.%(RecursiveDir)%(Filename)%(Extension)</LogicalName>
 	</EmbeddedResource>
-	<PackageReference Include="AZMLib" Version="1.1.11" />
-	<PackageReference Include="UCNLDrivers" Version="1.1.4" />
+	<PackageReference Include="AZMLib" Version="1.1.15" />
+	<PackageReference Include="UCNLDrivers" Version="1.1.6" />
      <PackageReference Include="UCNLPhysics" Version="1.0.0" />
 	 <PackageReference Include="UCNLMan" Version="1.0.1" />
 	 <PackageReference Include="UCNLNav" Version="1.0.1" />
