@@ -34,11 +34,11 @@
 	<EmbeddedResource Include="wwwroot\**">
 		<LogicalName>AzimuthConsole.wwwroot.%(RecursiveDir)%(Filename)%(Extension)</LogicalName>
 	</EmbeddedResource>
-	<PackageReference Include="AZMLib" Version="1.1.15" />
+	<PackageReference Include="AZMLib" Version="1.1.17" />
 	<PackageReference Include="UCNLDrivers" Version="1.1.6" />
      <PackageReference Include="UCNLPhysics" Version="1.0.0" />
 	 <PackageReference Include="UCNLMan" Version="1.0.1" />
-	 <PackageReference Include="UCNLNav" Version="1.0.1" />
+	 <PackageReference Include="UCNLNav" Version="1.0.3" />
 	 <PackageReference Include="UCNLNMEA" Version="1.0.0" />
 	 <PackageReference Include="UCNLSalinity" Version="1.0.1" />
 	<!-- <PackageReference Include="System.IO.Ports" Version="10.0.5" /> -->

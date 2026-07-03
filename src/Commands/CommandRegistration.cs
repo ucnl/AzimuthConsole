@@ -1,4 +1,5 @@
 ﻿// AzimuthConsole/Commands/CommandRegistration.cs
+using AZMLib;
 using System.Globalization;
 
 namespace AzimuthConsole.Commands
@@ -277,21 +278,42 @@ namespace AzimuthConsole.Commands
                 Id = "LHOV",
                 Category = "Position",
                 Sources = "T,R,W",
-                Parameters = "lat=N,lon=N,hdg=N",
+                Parameters = "hdg=N,[lat=N],[lon=N]",
                 Response = "LHOV,OK",
-                Description = "Override location and heading (empty params = disable override)"
+                Description = "Override heading and optionally location (empty params = disable override)"
             }, async (args, ctx) =>
             {
-                if (args.Count == 0 || (!args.ContainsKey("lat") && !args.ContainsKey("lon") && !args.ContainsKey("hdg")))
+                if (args.Count == 0 || !args.ContainsKey("hdg"))
                 {
                     runtime.DisableLocationOverride();
                     return CommandResult.Ok();
                 }
-                var lat = double.Parse(args.GetValueOrDefault("lat", "NaN"), CultureInfo.InvariantCulture);
-                var lon = double.Parse(args.GetValueOrDefault("lon", "NaN"), CultureInfo.InvariantCulture);
-                var hdg = double.Parse(args.GetValueOrDefault("hdg", "NaN"), CultureInfo.InvariantCulture);
-                if (double.IsNaN(lat) || double.IsNaN(lon) || double.IsNaN(hdg))
-                    return CommandResult.Error("lat, lon, hdg required");
+
+                var hdg = double.Parse(args["hdg"], CultureInfo.InvariantCulture);
+                if (!AZM.IsHdnDeg(hdg))
+                    return CommandResult.Error("hdg: invalid heading");
+
+                double lat = double.NaN;
+                double lon = double.NaN;
+
+                if (args.ContainsKey("lat"))
+                {
+                    lat = double.Parse(args["lat"], CultureInfo.InvariantCulture);
+                    if (!AZM.IsLatDeg(lat))
+                        return CommandResult.Error("lat: invalid latitude");
+                }
+
+                if (args.ContainsKey("lon"))
+                {
+                    lon = double.Parse(args["lon"], CultureInfo.InvariantCulture);
+                    if (!AZM.IsLonDeg(lon))
+                        return CommandResult.Error("lon: invalid longitude");
+                }
+
+                // Если задан только один из lat/lon — ошибка
+                if (!double.IsNaN(lat) != !double.IsNaN(lon))
+                    return CommandResult.Error("lat and lon must be specified together");
+
                 runtime.OverrideLocation(lat, lon, hdg);
                 return CommandResult.Ok();
             });
