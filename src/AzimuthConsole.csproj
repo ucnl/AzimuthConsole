@@ -16,7 +16,7 @@
 
 	<MajorVersion>2</MajorVersion>
 	<MinorVersion>1</MinorVersion>
-	<PatchVersion>2</PatchVersion>	
+	<PatchVersion>4</PatchVersion>	
 	<BuildNumber Condition=" '$(BuildNumber)' == '' ">$([System.DateTime]::Now.ToString("HHmm"))</BuildNumber>
 	<Version>$(MajorVersion).$(MinorVersion).$(PatchVersion).$(BuildNumber)</Version>
 	  	  
