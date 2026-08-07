@@ -35,6 +35,7 @@
 	<EmbeddedResource Include="wwwroot\**">
 		<LogicalName>AzimuthConsole.wwwroot.%(RecursiveDir)%(Filename)%(Extension)</LogicalName>
 	</EmbeddedResource>
+	<None Remove="WWSalinity.xml" />
 	<PackageReference Include="AZMLib" Version="1.1.17" />
 	<PackageReference Include="UCNLDrivers" Version="1.1.6" />
      <PackageReference Include="UCNLPhysics" Version="1.0.0" />
@@ -42,6 +43,7 @@
 	 <PackageReference Include="UCNLNav" Version="1.0.3" />
 	 <PackageReference Include="UCNLNMEA" Version="1.0.0" />
 	 <PackageReference Include="UCNLSalinity" Version="1.0.1" />
+	 <EmbeddedResource Include="WWSalinity.xml" />
 	<!-- <PackageReference Include="System.IO.Ports" Version="10.0.5" /> -->
   
     <EmbeddedResource Update="wwwroot\i18n.js">

@@ -420,15 +420,17 @@ namespace AzimuthConsole.Commands
                 Id = "SCAL",
                 Category = "Calibration",
                 Sources = "T,R,W",
-                Parameters = "start=N,step=N,n=N",
+                Parameters = "start=N,step=N,n=N,lt=N,ln=N",
                 Response = "SCAL,OK",
-                Description = "Start antenna calibration with rotator (default: start=0,step=15,n=20)"
+                Description = "Start antenna calibration with rotator (default: start=0,step=15,n=20,lt=nan,ln=nan)"
             }, async (args, ctx) =>
             {
                 var start = args.TryGetValue("start", out var s) ? double.Parse(s, CultureInfo.InvariantCulture) : 0.0;
                 var step = args.TryGetValue("step", out var st) ? double.Parse(st, CultureInfo.InvariantCulture) : 15.0;
                 var n = args.TryGetValue("n", out var sn) ? int.Parse(sn) : 20;
-                runtime.StartCalibration(start, step, n);
+                var stLt = args.TryGetValue("lt", out var lt) ? double.Parse(lt, CultureInfo.InvariantCulture) : double.NaN;
+                var stLn = args.TryGetValue("ln", out var ln) ? double.Parse(ln, CultureInfo.InvariantCulture) : double.NaN;
+                runtime.StartCalibration(start, step, n, stLt, stLn);
                 return CommandResult.Ok();
             });
 

@@ -575,7 +575,7 @@ namespace AzimuthConsole
             }
         }
 
-        public void StartCalibration(double start, double step, int n)
+        public void StartCalibration(double start, double step, int n, double stLatOv = double.NaN, double stLonOv = double.NaN)
         {
             if (_calibrationManager != null && _calibrationManager.State != CalibrationState.Idle)
             {
@@ -596,16 +596,21 @@ namespace AzimuthConsole
                 return;
             }
 
-            _azmManager.PauseInterrogation();
+            //_azmManager.PauseInterrogation();
 
             _calibrationManager = new CalibrationManager(
                 rotator,
                 _azmManager,
                 msg => _logger?.Write($"[CAL] {msg}"),
-                AppContext.BaseDirectory);
+                AppContext.BaseDirectory, stLatOv, stLonOv);
 
             _calibrationManager.Start(start, step, n);
-            _logger?.Write($"[CAL] Started: start={start:F1}°, step={step:F1}°, n={n}");
+            if (!double.IsNaN(stLatOv) && !double.IsNaN(stLonOv))
+                _logger?.Write($"[CAL] Started with location override: {stLatOv:F6}°, {stLonOv:F6}°");
+            else
+                _logger?.Write($"[CAL] Started in relative mode (no location override)");
+
+            _logger?.Write($"[CAL] Parameters: start={start:F1}°, step={step:F1}°, n={n}");
         }
 
         public void StopCalibration()

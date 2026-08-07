@@ -44,7 +44,7 @@ foreach ($platform in $platforms) {
     
     # 1. Публикация
     Write-Host "  Publishing..."
-    dotnet publish -c Release -r $rid --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=true -o $outputPath
+    dotnet publish -c Release -r $rid --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=false -o $outputPath
     
     if ($LASTEXITCODE -ne 0) {
         Write-Host "  [FAILED] Publishing FAILED for $rid!" -ForegroundColor Red

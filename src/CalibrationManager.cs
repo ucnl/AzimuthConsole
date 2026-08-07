@@ -48,17 +48,25 @@ public class CalibrationManager
     public int CollectedPoints => _calibrationPairs.Count;
     public int TotalPoints => (int)(360.0 / _stepAngle_deg);
 
+
+    private readonly double _stationOvLat;
+    private readonly double _stationOvLon;
+
+
     private readonly List<CalibrationDataPoint> _rawData = new();
     private readonly List<(double EncoderAngle, double MeasuredAzimuth)> _calibrationPairs = new();
 
     public IReadOnlyList<(double EncoderAngle, double MeasuredAzimuth)> CalibrationPairs => _calibrationPairs;
 
     public CalibrationManager(uAuxRadantPort rotator, AZMManager azmManager,
-        Action<string> log, string basePath)
+        Action<string> log, string basePath, double stOvLat = double.NaN, double stOvLon = double.NaN)
     {
         _rotator = rotator ?? throw new ArgumentNullException(nameof(rotator));
         _azmManager = azmManager ?? throw new ArgumentNullException(nameof(azmManager));
         _log = log;
+
+        _stationOvLat = stOvLat;
+        _stationOvLon = stOvLon;
 
         _azmManager.USBLRawDataHandler += OnUSBLRawData;
         _azmManager.USBLRawDataEventEnabled = true;
@@ -83,6 +91,10 @@ public class CalibrationManager
             return;
         }
 
+        // Останавливаем опрос перед началом калибровки
+        _azmManager.PauseInterrogation();
+        _log("Interrogation paused for calibration");
+
         _stepAngle_deg = stepAngle;
         _measurementsPerPoint = measurementsPerPoint;
         _rawData.Clear();
@@ -101,6 +113,17 @@ public class CalibrationManager
     {
         _state = CalibrationState.Idle;
         _rotator.RequestStop();
+
+        // Отключаем LocationOverride
+        _azmManager.DisableLocationOverride();
+
+        // Возобновляем опрос
+        if (!_azmManager.InterrogationActive)
+        {
+            _azmManager.ResumeInterrogation();
+            _log("Interrogation resumed");
+        }
+
         _log("Calibration stopped");
     }
 
@@ -141,7 +164,20 @@ public class CalibrationManager
             {
                 _state = CalibrationState.Measuring;
                 _currentMeasurementCount = 0;
-                _log($"Measuring at {_currentTargetAngle_deg:F1}° ({_measurementsPerPoint} samples)");
+
+                // Устанавливаем LocationOverride: координаты пирса + угол энкодера как heading
+                _azmManager.OverrideLocation(_stationOvLat, _stationOvLon, _rotator.CurrentAngle);
+
+                // Запускаем опрос для сбора измерений
+                _azmManager.ResumeInterrogation();
+
+                string locInfo = (!double.IsNaN(_stationOvLat) && !double.IsNaN(_stationOvLon))
+                ? $"at {_stationOvLat:F6}°, {_stationOvLon:F6}°"
+                : "in relative mode";
+
+                _log($"Measuring at {_currentTargetAngle_deg:F1}° " +
+                     $"(encoder: {_rotator.CurrentAngle:F1}°, {locInfo}) " +
+                     $"- {_measurementsPerPoint} samples");
             }
             else
             {
@@ -171,6 +207,9 @@ public class CalibrationManager
 
         if (_currentMeasurementCount >= _measurementsPerPoint)
         {
+            // Останавливаем опрос на время поворота
+            _azmManager.PauseInterrogation();
+
             var pointsForAngle = _rawData
                 .Where(p => Math.Abs(p.TargetAngle_deg - _currentTargetAngle_deg) < 0.1)
                 .ToList();
@@ -178,8 +217,9 @@ public class CalibrationManager
             if (pointsForAngle.Count > 0)
             {
                 double avgHAngle = pointsForAngle.Average(p => p.HAngle_deg);
-                _calibrationPairs.Add((_currentTargetAngle_deg, avgHAngle));
-                _log($"Angle {_currentTargetAngle_deg:F1}° → avg azimuth = {avgHAngle:F2}°");
+                // Сохраняем реальный угол энкодера, а не целевой
+                _calibrationPairs.Add((_rotator.CurrentAngle, avgHAngle));
+                _log($"Encoder {_rotator.CurrentAngle:F1}° → avg azimuth = {avgHAngle:F2}°");
             }
 
             double nextAngle = _currentTargetAngle_deg + _stepAngle_deg;
@@ -197,6 +237,17 @@ public class CalibrationManager
     private void Complete()
     {
         _state = CalibrationState.Completed;
+
+        // Отключаем LocationOverride
+        _azmManager.DisableLocationOverride();
+
+        // Возобновляем опрос в обычном режиме
+        if (!_azmManager.InterrogationActive)
+        {
+            _azmManager.ResumeInterrogation();
+            _log("Interrogation resumed");
+        }
+
         _log($"Calibration completed. {_calibrationPairs.Count} points collected.");
         SaveCalibrationData();
     }
