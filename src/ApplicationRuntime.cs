@@ -710,7 +710,7 @@ namespace AzimuthConsole
         public void SetPSIMSSBOutput(bool on)
         {
             if (_azmManager != null)
-                _azmManager.IsPSIMSSBOutputEnabled = on;
+                _azmManager.SetPSIMSSBOutput(on);
             _logger?.Write($"[OUTPUT] PSIMSSB {(on ? "enabled" : "disabled")}");
         }
 
@@ -738,7 +738,9 @@ namespace AzimuthConsole
                 _auxManager?.Register(_azmPort);
                 _logger?.Write("[LOGPLAY] AZM port created for emulation");
             }
-            _auxManager?.Activate("azm");
+
+            if (_azmManager != null)
+                _azmManager.IsEmulationMode = true;
 
             if (isInstant)
                 _logPlayer.PlaybackInstant(fileName);
@@ -756,7 +758,7 @@ namespace AzimuthConsole
                 var idx = line.IndexOf(">>");
                 if (idx > 0)
                 {
-                    var nmea = line.Substring(idx + 2).Trim();
+                    var nmea = line.Substring(idx + 2).TrimStart();
                     _azmPort?.EmulateInput(nmea);
                 }
             }
@@ -767,7 +769,7 @@ namespace AzimuthConsole
                 var idx = line.IndexOf(">>");
                 if (idx > 0 && aux1 != null)
                 {
-                    var nmea = line.Substring(idx + 2).Trim();
+                    var nmea = line.Substring(idx + 2).TrimStart();
                     aux1.EmulateInput(nmea);
                 }
             }
@@ -778,7 +780,7 @@ namespace AzimuthConsole
                 var idx = line.IndexOf(">>");
                 if (idx > 0 && aux1 != null)
                 {
-                    var nmea = line.Substring(idx + 2).Trim();
+                    var nmea = line.Substring(idx + 2).TrimStart();
                     aux1.EmulateInput(nmea);
                 }
             }
@@ -807,6 +809,10 @@ namespace AzimuthConsole
             _logPlayer.RequestToStop();
             _auxManager?.Deactivate("azm");
             _auxManager?.Deactivate("aux1");
+
+            if (_azmManager != null)
+                _azmManager.IsEmulationMode = false;
+
             _logger?.Write("[LOGPLAY] Stopped");
             return true;
         }

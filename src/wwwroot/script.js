@@ -1086,6 +1086,7 @@ function drawBeacons() {
             let x, y;
             let coordType = 'none';
 
+            // Если есть абсолютные (даже устаревшие) — всегда используем их
             if (beacon.absoluteDistance && beacon.absoluteAzimuth !== undefined &&
                 !isNaN(beacon.absoluteDistance) && !isNaN(beacon.absoluteAzimuth)) {
 
@@ -1143,11 +1144,15 @@ function drawBeacons() {
             ctx.lineWidth = 3;
             ctx.stroke();
 
+            const displayAddress = (beacon.address !== undefined && beacon.address !== null)
+                ? (beacon.address + 1)
+                : (index + 1);
+
             ctx.fillStyle = 'white';
             ctx.font = 'bold 14px Arial';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
-            ctx.fillText(beacon.address?.toString() || (index + 1).toString(), x, y);
+            ctx.fillText(displayAddress.toString(), x, y);
 
             let label = '';
             if (coordType === 'absolute') {
