@@ -36,8 +36,8 @@
 		<LogicalName>AzimuthConsole.wwwroot.%(RecursiveDir)%(Filename)%(Extension)</LogicalName>
 	</EmbeddedResource>
 	<None Remove="WWSalinity.xml" />
-	<PackageReference Include="AZMLib" Version="1.1.28" />
-	<PackageReference Include="UCNLDrivers" Version="1.1.8" />
+	<PackageReference Include="AZMLib" Version="1.1.30" />
+	<PackageReference Include="UCNLDrivers" Version="1.1.10" />
      <PackageReference Include="UCNLPhysics" Version="1.0.0" />
 	 <PackageReference Include="UCNLMan" Version="1.0.1" />
 	 <PackageReference Include="UCNLNav" Version="1.0.3" />
