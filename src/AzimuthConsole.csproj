@@ -17,7 +17,7 @@
 
 	<MajorVersion>2</MajorVersion>
 	<MinorVersion>1</MinorVersion>
-	<PatchVersion>4</PatchVersion>	
+	<PatchVersion>5</PatchVersion>	
 	<BuildNumber Condition=" '$(BuildNumber)' == '' ">$([System.DateTime]::Now.ToString("HHmm"))</BuildNumber>
 	<Version>$(MajorVersion).$(MinorVersion).$(PatchVersion).$(BuildNumber)</Version>
 	  	  
@@ -36,7 +36,7 @@
 		<LogicalName>AzimuthConsole.wwwroot.%(RecursiveDir)%(Filename)%(Extension)</LogicalName>
 	</EmbeddedResource>
 	<None Remove="WWSalinity.xml" />
-	<PackageReference Include="AZMLib" Version="1.1.27" />
+	<PackageReference Include="AZMLib" Version="1.1.28" />
 	<PackageReference Include="UCNLDrivers" Version="1.1.8" />
      <PackageReference Include="UCNLPhysics" Version="1.0.0" />
 	 <PackageReference Include="UCNLMan" Version="1.0.1" />

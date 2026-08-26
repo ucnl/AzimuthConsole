@@ -1930,6 +1930,13 @@ function renderOutputSection() {
                     <input type="text" id="cfg-outu-addr" placeholder="255.255.255.255:28128" style="flex:1; padding:4px;">
                 </div>
                 <label><input type="checkbox" id="cfg-psimssb"> ${t('psimssbOutput')}</label>
+                <div style="display:flex; gap:8px; align-items:center; margin-left:20px;">
+                    <span style="font-size:11px;">${t('psimssbMode')}:</span>
+                    <select id="cfg-psimssb-mode" style="padding:4px;">
+                        <option value="H">Head-Up (relative)</option>
+                        <option value="NE">UTM (Northing/Easting)</option>
+                    </select>
+                </div>
             </div>
         </details>`;
 }
@@ -2201,7 +2208,8 @@ async function applySettings() {
     if (outuAddr) commands.push({ cmd: 'OUTU', params: { addr: outuAddr || 'OFF' } });
 
     const psimssb = document.getElementById('cfg-psimssb')?.checked;
-    commands.push({ cmd: 'PSIMSSB', params: { on: psimssb ? 'TRUE' : 'FALSE' } });
+    const psimssbMode = document.getElementById('cfg-psimssb-mode')?.value || 'H';
+    commands.push({ cmd: 'PSIMSSB', params: { on: psimssb ? 'TRUE' : 'FALSE', mode: psimssbMode } });
 
     for (const c of commands) {
         await sendCommandAsync(c.cmd, c.params);

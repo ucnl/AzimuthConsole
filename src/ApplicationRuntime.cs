@@ -707,11 +707,15 @@ namespace AzimuthConsole
 
         public bool GetPSIMSSBOutput() => _azmManager?.IsPSIMSSBOutputEnabled ?? false;
 
-        public void SetPSIMSSBOutput(bool on)
+        public void SetPSIMSSBOutput(bool on, string mode = "H")
         {
             if (_azmManager != null)
-                _azmManager.SetPSIMSSBOutput(on);
-            _logger?.Write($"[OUTPUT] PSIMSSB {(on ? "enabled" : "disabled")}");
+            {
+                _azmManager.SetPSIMSSBOutput(on, mode);
+            }
+
+            var modeStr = mode.ToUpper() == "NE" ? "UTM (Northings/Eastings)" : "Head-Up (относительные)";
+            _logger?.Write($"[OUTPUT] PSIMSSB {(on ? "enabled" : "disabled")}, mode={modeStr}");
         }
 
         public void SetWebLogging(bool enable)

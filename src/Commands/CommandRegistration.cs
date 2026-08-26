@@ -501,17 +501,23 @@ namespace AzimuthConsole.Commands
                 Id = "PSIMSSB",
                 Category = "Output",
                 Sources = "T,R,W",
-                Parameters = "on=TRUE/FALSE",
-                Response = "PSIMSSB,OK",
-                Description = "Enable/disable PSIMSSB (Simrad/HiPAP) output format"
+                Parameters = "on=TRUE|FALSE,mode=H|NE",
+                Response = "PSIMSSB,OK,on=...,mode=...",
+                Description = "Enable/disable PSIMSSB output. mode=H (Head-Up, relative), mode=NE (UTM Northing/Easting)"
             }, async (args, ctx) =>
             {
-                if (args.TryGetValue("on", out var val))
+                var on = args.TryGetValue("on", out var onStr) ? onStr.ToUpper() == "TRUE" : false;
+                var mode = args.TryGetValue("mode", out var modeStr) ? modeStr.ToUpper() : "H";
+
+                if (mode != "H" && mode != "NE")
+                    return CommandResult.Error("mode must be H or NE");
+
+                runtime.SetPSIMSSBOutput(on, mode);
+                return CommandResult.Ok(new Dictionary<string, string>
                 {
-                    runtime.SetPSIMSSBOutput(val.ToUpper() == "TRUE" || val == "1" || val.ToUpper() == "ON");
-                    return CommandResult.Ok("on", val.ToUpper());
-                }
-                return CommandResult.Ok("on", runtime.GetPSIMSSBOutput() ? "TRUE" : "FALSE");
+                    ["on"] = on ? "TRUE" : "FALSE",
+                    ["mode"] = mode
+                });
             });
         }
 
