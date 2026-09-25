@@ -1,6 +1,14 @@
-# Устанавливаем кодировку UTF-8
-[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+# Устанавливаем кодировку UTF-8 (может не работать в Package Manager Console)
+try {
+    [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+} catch {
+    # Package Manager Console не поддерживает установку OutputEncoding
+}
 chcp 65001 > $null
+
+# Заставляем dotnet выводить на английском — избегаем кракозябр
+$env:DOTNET_CLI_UI_LANGUAGE = "en"
+$env:DOTNET_NOLOGO = "1"
 
 # Настройки
 $platforms = @(
@@ -15,6 +23,14 @@ $platforms = @(
 $basePath = ".\bin\Release\net8.0\publish"
 $archivesPath = ".\bin\Release\net8.0\archives"
 $projectName = "AzimuthConsole"
+$projectFile = ".\${projectName}.csproj"   # ← публикуем проект, а не решение
+
+# Проверяем, что проект существует
+if (!(Test-Path $projectFile)) {
+    Write-Host "ERROR: Project file not found: $projectFile" -ForegroundColor Red
+    Write-Host "Make sure you run this script from the directory containing ${projectName}.csproj" -ForegroundColor Red
+    exit 1
+}
 
 # Создаем папку для архивов
 if (!(Test-Path $archivesPath)) {
@@ -28,7 +44,7 @@ Write-Host "Old archives removed" -ForegroundColor Gray
 Write-Host ""
 
 Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "  Publishing and Archiving AzimuthConsole" -ForegroundColor Cyan
+Write-Host "  Publishing and Archiving $projectName" -ForegroundColor Cyan
 Write-Host "  Started at: $(Get-Date -Format 'HH:mm:ss')" -ForegroundColor Gray
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
@@ -60,9 +76,17 @@ foreach ($platform in $platforms) {
         Remove-Item -Path $archivePath -Force
     }
     
-    # 1. Публикация
+    # 1. Публикация (проект, не решение!)
     Write-Host "  Publishing..."
-    dotnet publish -c Release -r $rid --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=false -o $outputPath
+    dotnet publish $projectFile `
+        -c Release `
+        -r $rid `
+        --self-contained true `
+        -p:PublishSingleFile=true `
+        -p:PublishTrimmed=false `
+        -o $outputPath `
+        --nologo `
+        -v:minimal
     
     if ($LASTEXITCODE -ne 0) {
         Write-Host "  [FAILED] Publishing FAILED for $rid!" -ForegroundColor Red

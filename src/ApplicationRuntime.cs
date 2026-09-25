@@ -479,7 +479,7 @@ namespace AzimuthConsole
             return _portManager?.GetAllInfo() ?? Enumerable.Empty<string>();
         }
 
-        public async Task ConnectAsync()
+        public Task ConnectAsync()
         {
             var chain = new List<string>();
 
@@ -498,15 +498,19 @@ namespace AzimuthConsole
                 _auxManager?.ActivateChain(chain.ToArray());
 
             _logger?.Write("[APP] Connections opened");
+
+            return Task.CompletedTask;
         }
 
-        public async Task DisconnectAsync()
+        public Task DisconnectAsync()
         {
             _azmManager?.Disconnect();
             //_auxManager?.Deactivate("azm");
             _auxManager?.Deactivate("aux1");
             _auxManager?.Deactivate("aux2");
             _logger?.Write("[APP] Connections closed");
+
+            return Task.CompletedTask;
         }
 
         public void ResumeInterrogation() => _azmManager?.ResumeInterrogation();

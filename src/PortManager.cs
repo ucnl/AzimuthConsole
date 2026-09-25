@@ -145,7 +145,7 @@ namespace AzimuthConsole
             var source = _aux.GetSource("azm");
             if (source is uAuxPort p)
             {
-                p.ProposedPortName = port?.ToUpper() == "AUTO" ? string.Empty : port;                
+                p.ProposedPortName = port?.ToUpper() == "AUTO" ? string.Empty : (port ?? string.Empty); ;                
                 return CommandResult.Ok();
             }
 
@@ -176,7 +176,7 @@ namespace AzimuthConsole
                     _ => new uAuxGNSSPort("aux1", (BaudRate)int.Parse(baud!))
                 };
 
-                source.ProposedPortName = port?.ToUpper() == "AUTO" ? string.Empty : port;
+                source.ProposedPortName = port?.ToUpper() == "AUTO" ? string.Empty : (port ?? string.Empty); ;
                 source.IsTryAlways = true;
                 source.IsLogIncoming = true;
 
@@ -205,7 +205,7 @@ namespace AzimuthConsole
             {
                 var source = new uAuxGNSSPort("aux2", (BaudRate)int.Parse(baud!))
                 {
-                    ProposedPortName = port?.ToUpper() == "AUTO" ? string.Empty : port,
+                    ProposedPortName = port?.ToUpper() == "AUTO" ? string.Empty : (port ?? string.Empty),
                     Mode = GNSSMode.CompassOnly,
                     IsTryAlways = true,
                     IsLogIncoming = true
@@ -235,7 +235,7 @@ namespace AzimuthConsole
             {
                 var source = new uAuxRadantPort("rdt", (BaudRate)int.Parse(baud!))
                 {
-                    ProposedPortName = port?.ToUpper() == "AUTO" ? string.Empty : port,
+                    ProposedPortName = port?.ToUpper() == "AUTO" ? string.Empty : (port ?? string.Empty),
                     IsTryAlways = true,
                     IsLogIncoming = true,
                     IsRawModeOnly = true

@@ -10,7 +10,7 @@ namespace AzimuthConsole.Web
 {
     public class WebServer : IDisposable
     {
-        private HttpListener _listener;
+        private HttpListener _listener = null!;
         private readonly int _port;
         private bool _isRunning;
         private readonly CancellationTokenSource _cts = new();
@@ -21,8 +21,8 @@ namespace AzimuthConsole.Web
         private readonly Action<string> _onLogAlways;
         private readonly Action<string>? _onLogCommands;
 
-        private Func<byte[]>? _getLogArchive;
-        private Func<byte[]>? _getCurrentLog;        
+        private Func<byte[]?>? _getLogArchive;
+        private Func<byte[]?>? _getCurrentLog;        
 
         public WebServer(int port, CommandRouter router,
         Action<string> onLogAlways, Action<string>? onLogCommands = null)
@@ -133,7 +133,7 @@ namespace AzimuthConsole.Web
             try { _listener.Close(); } catch { }
         }
 
-        public void SetLogProviders(Func<byte[]>? getCurrentLog, Func<byte[]>? getLogArchive)
+        public void SetLogProviders(Func<byte[]?>? getCurrentLog, Func<byte[]?>? getLogArchive)
         {
             _getCurrentLog = getCurrentLog;
             _getLogArchive = getLogArchive;

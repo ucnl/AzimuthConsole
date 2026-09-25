@@ -31,10 +31,8 @@ namespace AzimuthConsole.Commands
                 Parameters = "-",
                 Response = "ITG?,OK,active=TRUE/FALSE",
                 Description = "Check interrogation status"
-            }, async (args, ctx) =>
-            {
-                return CommandResult.Ok("active", runtime.InterrogationActive ? "TRUE" : "FALSE");
-            });
+            }, (args, ctx) =>
+                Task.FromResult(CommandResult.Ok("active", runtime.InterrogationActive ? "TRUE" : "FALSE")));
 
             router.Register(new CommandMeta
             {
@@ -44,10 +42,10 @@ namespace AzimuthConsole.Commands
                 Parameters = "-",
                 Response = "RITG,OK",
                 Description = "Resume responders interrogation"
-            }, async (args, ctx) =>
+            }, (args, ctx) =>
             {
                 runtime.ResumeInterrogation();
-                return CommandResult.Ok();
+                return Task.FromResult(CommandResult.Ok());
             });
 
             router.Register(new CommandMeta
@@ -58,10 +56,10 @@ namespace AzimuthConsole.Commands
                 Parameters = "-",
                 Response = "PITG,OK",
                 Description = "Pause responders interrogation"
-            }, async (args, ctx) =>
+            }, (args, ctx) =>
             {
                 runtime.PauseInterrogation();
-                return CommandResult.Ok();
+                return Task.FromResult(CommandResult.Ok());
             });
         }
 
@@ -163,13 +161,13 @@ namespace AzimuthConsole.Commands
                 Parameters = "-",
                 Response = "PORTS,OK,port0=id|port|status,...",
                 Description = "Show all ports status"
-            }, async (args, ctx) =>
+            }, (args, ctx) =>
             {
                 var info = runtime.GetAllPortsInfo().ToList();
                 var data = new Dictionary<string, string>();
                 for (int i = 0; i < info.Count; i++)
                     data[$"port{i}"] = info[i];
-                return CommandResult.Ok(data);
+                return Task.FromResult(CommandResult.Ok(data));
             });
         }
 
@@ -183,14 +181,14 @@ namespace AzimuthConsole.Commands
                 Parameters = "mask=N",
                 Response = "MSK,OK,mask=N",
                 Description = "Get/set address mask (restarts interrogation on change)"
-            }, async (args, ctx) =>
+            }, (args, ctx) =>
             {
                 if (args.TryGetValue("mask", out var val))
                 {
                     runtime.UpdateAddressMask(ushort.Parse(val));
-                    return CommandResult.Ok();
+                    return Task.FromResult(CommandResult.Ok());
                 }
-                return CommandResult.Ok("mask", runtime.AddressMask.ToString());
+                return Task.FromResult(CommandResult.Ok("mask", runtime.AddressMask.ToString()));
             });
 
             router.Register(new CommandMeta
@@ -201,14 +199,14 @@ namespace AzimuthConsole.Commands
                 Parameters = "val=N",
                 Response = "SLN,OK,val=N",
                 Description = "Get/set salinity (PSU)"
-            }, async (args, ctx) =>
+            }, (args, ctx) =>
             {
                 if (args.TryGetValue("val", out var val))
                 {
                     runtime.UpdateSalinity(double.Parse(val, CultureInfo.InvariantCulture));
-                    return CommandResult.Ok();
+                    return Task.FromResult(CommandResult.Ok());
                 }
-                return CommandResult.Ok("val", runtime.Salinity.ToString("F1"));
+                return Task.FromResult(CommandResult.Ok("val", runtime.Salinity.ToString("F1")));
             });
 
             router.Register(new CommandMeta
@@ -219,14 +217,14 @@ namespace AzimuthConsole.Commands
                 Parameters = "val=N",
                 Response = "MDST,OK,val=N",
                 Description = "Get/set max distance in meters (restarts interrogation on change)"
-            }, async (args, ctx) =>
+            }, (args, ctx) =>
             {
                 if (args.TryGetValue("val", out var val))
                 {
                     runtime.UpdateMaxDistance(double.Parse(val, CultureInfo.InvariantCulture));
-                    return CommandResult.Ok();
+                    return Task.FromResult(CommandResult.Ok());
                 }
-                return CommandResult.Ok("val", runtime.MaxDistance.ToString("F0"));
+                return Task.FromResult(CommandResult.Ok("val", runtime.MaxDistance.ToString("F0")));
             });
 
             router.Register(new CommandMeta
@@ -237,20 +235,20 @@ namespace AzimuthConsole.Commands
                 Parameters = "val=N",
                 Response = "SOS,OK,val=N",
                 Description = "Get/set speed of sound (m/s). Empty/NaN = auto"
-            }, async (args, ctx) =>
+            }, (args, ctx) =>
             {
                 if (args.TryGetValue("val", out var val) && !string.IsNullOrEmpty(val))
                 {
                     runtime.UpdateSoundSpeed(double.Parse(val, CultureInfo.InvariantCulture));
-                    return CommandResult.Ok();
+                    return Task.FromResult(CommandResult.Ok());
                 }
                 else if (args.TryGetValue("val", out _))
                 {
                     // val= с пустым значением — устанавливаем авто (NaN)
                     runtime.UpdateSoundSpeed(double.NaN);
-                    return CommandResult.Ok();
+                    return Task.FromResult(CommandResult.Ok());
                 }
-                return CommandResult.Ok("val", runtime.SoundSpeed.ToString("F1"));
+                return Task.FromResult(CommandResult.Ok("val", runtime.SoundSpeed.ToString("F1")));
             });
 
             router.Register(new CommandMeta
@@ -261,14 +259,14 @@ namespace AzimuthConsole.Commands
                 Parameters = "addr=N,code=N",
                 Response = "CREQ,OK",
                 Description = "Send custom data request to beacon (addr=1-16, code=3-30)"
-            }, async (args, ctx) =>
+            }, (args, ctx) =>
             {
                 if (args.TryGetValue("addr", out var addr) && args.TryGetValue("code", out var code))
                 {
                     runtime.RequestBeaconData(int.Parse(addr), int.Parse(code));
-                    return CommandResult.Ok();
+                    return Task.FromResult(CommandResult.Ok());
                 }
-                return CommandResult.Error("usage: CREQ,addr=N,code=N");
+                return Task.FromResult(CommandResult.Error("usage: CREQ,addr=N,code=N"));
             });
         }
 
@@ -282,17 +280,17 @@ namespace AzimuthConsole.Commands
                 Parameters = "hdg=N,[lat=N],[lon=N]",
                 Response = "LHOV,OK",
                 Description = "Override heading and optionally location (empty params = disable override)"
-            }, async (args, ctx) =>
+            }, (args, ctx) =>
             {
                 if (args.Count == 0 || !args.ContainsKey("hdg"))
                 {
                     runtime.DisableLocationOverride();
-                    return CommandResult.Ok();
+                    return Task.FromResult(CommandResult.Ok());
                 }
 
                 var hdg = double.Parse(args["hdg"], CultureInfo.InvariantCulture);
                 if (!AZM.IsHdnDeg(hdg))
-                    return CommandResult.Error("hdg: invalid heading");
+                    return Task.FromResult(CommandResult.Error("hdg: invalid heading"));
 
                 double lat = double.NaN;
                 double lon = double.NaN;
@@ -301,22 +299,22 @@ namespace AzimuthConsole.Commands
                 {
                     lat = double.Parse(args["lat"], CultureInfo.InvariantCulture);
                     if (!AZM.IsLatDeg(lat))
-                        return CommandResult.Error("lat: invalid latitude");
+                        return Task.FromResult(CommandResult.Error("lat: invalid latitude"));
                 }
 
                 if (args.ContainsKey("lon"))
                 {
                     lon = double.Parse(args["lon"], CultureInfo.InvariantCulture);
                     if (!AZM.IsLonDeg(lon))
-                        return CommandResult.Error("lon: invalid longitude");
+                        return Task.FromResult(CommandResult.Error("lon: invalid longitude"));
                 }
 
                 // Если задан только один из lat/lon — ошибка
                 if (!double.IsNaN(lat) != !double.IsNaN(lon))
-                    return CommandResult.Error("lat and lon must be specified together");
+                    return Task.FromResult(CommandResult.Error("lat and lon must be specified together"));
 
                 runtime.OverrideLocation(lat, lon, hdg);
-                return CommandResult.Ok();
+                return Task.FromResult(CommandResult.Ok());
             });
 
             router.Register(new CommandMeta
@@ -327,10 +325,8 @@ namespace AzimuthConsole.Commands
                 Parameters = "-",
                 Response = "LHO?,OK,active=TRUE/FALSE",
                 Description = "Check location override status"
-            }, async (args, ctx) =>
-            {
-                return CommandResult.Ok("active", runtime.LocationOverrideActive ? "TRUE" : "FALSE");
-            });
+            }, (args, ctx) =>
+                Task.FromResult(CommandResult.Ok("active", runtime.LocationOverrideActive ? "TRUE" : "FALSE")));
 
             router.Register(new CommandMeta
             {
@@ -340,14 +336,14 @@ namespace AzimuthConsole.Commands
                 Parameters = "mode=0/1/2,c0..c5=N",
                 Response = "SRC3,OK",
                 Description = "Set 3 LBL responder coordinates (0=discard,1=cartesian,2=geographic)"
-            }, async (args, ctx) =>
+            }, (args, ctx) =>
             {
                 var mode = args.GetValueOrDefault("mode", "0");
                 var coords = new double[6];
                 for (int i = 0; i < 6; i++)
                     coords[i] = double.TryParse(args.GetValueOrDefault($"c{i}", "NaN"), out var v) ? v : double.NaN;
                 runtime.SetLBLResponders(mode, coords);
-                return CommandResult.Ok();
+                return Task.FromResult(CommandResult.Ok());
             });
 
             router.Register(new CommandMeta
@@ -358,7 +354,7 @@ namespace AzimuthConsole.Commands
                 Parameters = "x=N,y=N,phi=N",
                 Response = "OFS,OK,x=N,y=N,phi=N",
                 Description = "Get/set antenna offsets (X,Y in meters, Phi in degrees)"
-            }, async (args, ctx) =>
+            }, (args, ctx) =>
             {
                 if (args.TryGetValue("x", out var x) &&
                     args.TryGetValue("y", out var y) &&
@@ -368,14 +364,14 @@ namespace AzimuthConsole.Commands
                         double.Parse(x, CultureInfo.InvariantCulture),
                         double.Parse(y, CultureInfo.InvariantCulture),
                         double.Parse(phi, CultureInfo.InvariantCulture));
-                    return CommandResult.Ok();
+                    return Task.FromResult(CommandResult.Ok());
                 }
-                return CommandResult.Ok(new Dictionary<string, string>
+                return Task.FromResult(CommandResult.Ok(new Dictionary<string, string>
                 {
                     ["x"] = runtime.AntennaXOffset.ToString("F2"),
                     ["y"] = runtime.AntennaYOffset.ToString("F2"),
                     ["phi"] = runtime.AntennaPhi.ToString("F1")
-                });
+                }));
             });
         }
 
@@ -389,10 +385,10 @@ namespace AzimuthConsole.Commands
                 Parameters = "-",
                 Response = "RRA?,OK",
                 Description = "Request current responder local address"
-            }, async (args, ctx) =>
+            }, (args, ctx) =>
             {
                 runtime.QueryLocalAddress();
-                return CommandResult.Ok();
+                return Task.FromResult(CommandResult.Ok());
             });
 
             router.Register(new CommandMeta
@@ -403,14 +399,14 @@ namespace AzimuthConsole.Commands
                 Parameters = "addr=N",
                 Response = "SRRA,OK",
                 Description = "Set responder local address"
-            }, async (args, ctx) =>
+            }, (args, ctx) =>
             {
                 if (args.TryGetValue("addr", out var addr))
                 {
                     runtime.SetLocalAddress(int.Parse(addr));
-                    return CommandResult.Ok();
+                    return Task.FromResult(CommandResult.Ok());
                 }
-                return CommandResult.Error("usage: SRRA,addr=N");
+                return Task.FromResult(CommandResult.Error("usage: SRRA,addr=N"));
             });
         }
 
@@ -427,7 +423,7 @@ namespace AzimuthConsole.Commands
                 Parameters = "mode=geographic|cartesian_fixed|beacon_referenced",
                 Response = "AMODE,OK,mode=...",
                 Description = "Get/set antenna mode"
-            }, async (args, ctx) =>
+            }, (args, ctx) =>
             {
                 if (args.TryGetValue("mode", out var modeStr))
                 {
@@ -444,11 +440,11 @@ namespace AzimuthConsole.Commands
                             mode = AZM_ANTENNA_MODE_Enum.AM_BEACON_REFERENCED;
                             break;
                         default:
-                            return CommandResult.Error($"mode: unknown value '{modeStr}'");
+                            return Task.FromResult(CommandResult.Error($"mode: unknown value '{modeStr}'"));
                     }
 
                     runtime.SetAntennaMode(mode);
-                    return CommandResult.Ok("mode", modeStr.ToLower());
+                    return Task.FromResult(CommandResult.Ok("mode", modeStr.ToLower()));
                 }
 
                 // GET
@@ -459,7 +455,7 @@ namespace AzimuthConsole.Commands
                     AZM_ANTENNA_MODE_Enum.AM_BEACON_REFERENCED => "beacon_referenced",
                     _ => "invalid"
                 };
-                return CommandResult.Ok("mode", currentMode);
+                return Task.FromResult(CommandResult.Ok("mode", currentMode));
             });
 
             // =====================================================
@@ -473,37 +469,37 @@ namespace AzimuthConsole.Commands
                 Parameters = "addr=N,lat=N,lon=N,[depth=N]",
                 Response = "RBADD,OK",
                 Description = "Add/update reference beacon (addr=1-16, lat/lon in degrees)"
-            }, async (args, ctx) =>
+            }, (args, ctx) =>
             {
                 if (!args.TryGetValue("addr", out var addrStr) ||
                     !args.TryGetValue("lat", out var latStr) ||
                     !args.TryGetValue("lon", out var lonStr))
                 {
-                    return CommandResult.Error("usage: RBADD,addr=N,lat=N,lon=N,[depth=N]");
+                    return Task.FromResult(CommandResult.Error("usage: RBADD,addr=N,lat=N,lon=N,[depth=N]"));
                 }
 
                 if (!int.TryParse(addrStr, out var addr) || addr < 1 || addr > 16)
-                    return CommandResult.Error("addr: must be integer 1..16");
+                    return Task.FromResult(CommandResult.Error("addr: must be integer 1..16"));
 
                 if (!double.TryParse(latStr, NumberStyles.Float, CultureInfo.InvariantCulture, out var lat)
                     || !AZM.IsLatDeg(lat))
-                    return CommandResult.Error("lat: out of range (-90..90)");
+                    return Task.FromResult(CommandResult.Error("lat: out of range (-90..90)"));
 
                 if (!double.TryParse(lonStr, NumberStyles.Float, CultureInfo.InvariantCulture, out var lon)
                     || !AZM.IsLonDeg(lon))
-                    return CommandResult.Error("lon: out of range (-180..180)");
+                    return Task.FromResult(CommandResult.Error("lon: out of range (-180..180)"));
 
                 double depth = 0.0;
                 if (args.TryGetValue("depth", out var depthStr))
                 {
                     if (!double.TryParse(depthStr, NumberStyles.Float, CultureInfo.InvariantCulture, out depth))
-                        return CommandResult.Error("depth: invalid number");
+                        return Task.FromResult(CommandResult.Error("depth: invalid number"));
                 }
 
                 bool ok = runtime.AddReferenceBeacon(addr, lat, lon, depth);
-                return ok
+                return Task.FromResult(ok
                     ? CommandResult.Ok()
-                    : CommandResult.Error("failed to add reference beacon");
+                    : CommandResult.Error("failed to add reference beacon"));
             });
 
             // =====================================================
@@ -517,18 +513,18 @@ namespace AzimuthConsole.Commands
                 Parameters = "addr=N",
                 Response = "RBDEL,OK",
                 Description = "Remove reference beacon by address (1-16)"
-            }, async (args, ctx) =>
+            }, (args, ctx) =>
             {
                 if (!args.TryGetValue("addr", out var addrStr))
-                    return CommandResult.Error("usage: RBDEL,addr=N");
+                    return Task.FromResult(CommandResult.Error("usage: RBDEL,addr=N"));
 
                 if (!int.TryParse(addrStr, out var addr) || addr < 1 || addr > 16)
-                    return CommandResult.Error("addr: must be integer 1..16");
+                    return Task.FromResult(CommandResult.Error("addr: must be integer 1..16"));
 
                 bool ok = runtime.RemoveReferenceBeacon(addr);
-                return ok
+                return Task.FromResult(ok
                     ? CommandResult.Ok()
-                    : CommandResult.Error("reference beacon not found");
+                    : CommandResult.Error("reference beacon not found"));
             });
 
             // =====================================================
@@ -542,7 +538,7 @@ namespace AzimuthConsole.Commands
                 Parameters = "-",
                 Response = "RBLST,OK,count=N,beacons=addr:lat:lon:depth;...",
                 Description = "List reference beacons"
-            }, async (args, ctx) =>
+            }, (args, ctx) =>
             {
                 var list = runtime.GetReferenceBeaconsList();
 
@@ -553,11 +549,11 @@ namespace AzimuthConsole.Commands
                             "{0}:{1:F6}:{2:F6}:{3:F1}",
                             (int)b.Address + 1, b.Lat_deg, b.Lon_deg, b.Depth_m)));
 
-                return CommandResult.Ok(new Dictionary<string, string>
+                return Task.FromResult(CommandResult.Ok(new Dictionary<string, string>
                 {
                     ["count"] = list.Count.ToString(),
                     ["beacons"] = beaconsStr
-                });
+                }));
             });
 
             // =====================================================
@@ -571,10 +567,10 @@ namespace AzimuthConsole.Commands
                 Parameters = "-",
                 Response = "RBCLR,OK",
                 Description = "Clear all reference beacons"
-            }, async (args, ctx) =>
+            }, (args, ctx) =>
             {
                 runtime.ClearReferenceBeacons();
-                return CommandResult.Ok();
+                return Task.FromResult(CommandResult.Ok());
             });
 
             // =====================================================
@@ -588,21 +584,21 @@ namespace AzimuthConsole.Commands
                 Parameters = "maxspeed=N[,threshold=N][,fifo=N][,maxage=N][,maxspread=N]",
                 Response = "SHPZ,OK,maxspeed=...,threshold=...,fifo=...,maxage=...,maxspread=...",
                 Description = "Get/set ship DH-filter and position buffer parameters (beacon_referenced mode)"
-            }, async (args, ctx) =>
+            }, (args, ctx) =>
             {
                 // GET (no args) — вернуть все параметры
                 if (args.Count == 0)
-                    return CommandResult.Ok(runtime.GetShipFilterSettings());
+                    return Task.FromResult(CommandResult.Ok(runtime.GetShipFilterSettings()));
 
                 // SET — maxspeed обязателен
                 if (!args.TryGetValue("maxspeed", out var maxSpeedStr))
-                    return CommandResult.Error("maxspeed is required");
+                    return Task.FromResult(CommandResult.Error("maxspeed is required"));
 
                 if (!double.TryParse(maxSpeedStr, NumberStyles.Float, CultureInfo.InvariantCulture, out var maxSpeed))
-                    return CommandResult.Error("maxspeed: invalid number");
+                    return Task.FromResult(CommandResult.Error("maxspeed: invalid number"));
 
                 if (!AZM.IsMaxShipSpeed(maxSpeed))
-                    return CommandResult.Error("maxspeed: out of range (0.5..50)");
+                    return Task.FromResult(CommandResult.Error("maxspeed: out of range (0.5..50)"));
 
                 // Опциональные параметры
                 double? threshold = null;
@@ -613,53 +609,50 @@ namespace AzimuthConsole.Commands
                 if (args.TryGetValue("threshold", out var thresholdStr))
                 {
                     if (!double.TryParse(thresholdStr, NumberStyles.Float, CultureInfo.InvariantCulture, out var t))
-                        return CommandResult.Error("threshold: invalid number");
+                        return Task.FromResult(CommandResult.Error("threshold: invalid number"));
                     if (!AZM.IsDhThreshold(t))
-                        return CommandResult.Error("threshold: out of range (0.5..500)");
+                        return Task.FromResult(CommandResult.Error("threshold: out of range (0.5..500)"));
                     threshold = t;
                 }
 
                 if (args.TryGetValue("fifo", out var fifoStr))
                 {
                     if (!int.TryParse(fifoStr, out var f))
-                        return CommandResult.Error("fifo: invalid integer");
+                        return Task.FromResult(CommandResult.Error("fifo: invalid integer"));
                     if (!AZM.IsDhFifoSize(f))
-                        return CommandResult.Error("fifo: out of range (2..32)");
+                        return Task.FromResult(CommandResult.Error("fifo: out of range (2..32)"));
                     fifo = f;
                 }
 
                 if (args.TryGetValue("maxage", out var maxAgeStr))
                 {
                     if (!double.TryParse(maxAgeStr, NumberStyles.Float, CultureInfo.InvariantCulture, out var ma))
-                        return CommandResult.Error("maxage: invalid number");
+                        return Task.FromResult(CommandResult.Error("maxage: invalid number"));
                     if (!AZM.IsRefShipMaxAge(ma))
-                        return CommandResult.Error("maxage: out of range (1000..600000)");
+                        return Task.FromResult(CommandResult.Error("maxage: out of range (1000..600000)"));
                     maxAge = ma;
                 }
 
                 if (args.TryGetValue("maxspread", out var maxSpreadStr))
                 {
                     if (!double.TryParse(maxSpreadStr, NumberStyles.Float, CultureInfo.InvariantCulture, out var ms))
-                        return CommandResult.Error("maxspread: invalid number");
+                        return Task.FromResult(CommandResult.Error("maxspread: invalid number"));
                     if (!AZM.IsRefMaxSpread(ms))
-                        return CommandResult.Error("maxspread: out of range (1..5000)");
+                        return Task.FromResult(CommandResult.Error("maxspread: out of range (1..5000)"));
                     maxSpread = ms;
                 }
 
                 try
                 {
                     runtime.SetShipFilterSettings(maxSpeed, threshold, fifo, maxAge, maxSpread);
-                    return CommandResult.Ok(runtime.GetShipFilterSettings());
+                    return Task.FromResult(CommandResult.Ok(runtime.GetShipFilterSettings()));
                 }
                 catch (ArgumentOutOfRangeException ex)
                 {
-                    return CommandResult.Error(ex.Message);
+                    return Task.FromResult(CommandResult.Error(ex.Message));
                 }
             });
         }
-
-
-
 
 
 
@@ -673,7 +666,7 @@ namespace AzimuthConsole.Commands
                 Parameters = "start=N,step=N,n=N,lt=N,ln=N",
                 Response = "SCAL,OK",
                 Description = "Start antenna calibration with rotator (default: start=0,step=15,n=20,lt=nan,ln=nan)"
-            }, async (args, ctx) =>
+            }, (args, ctx) =>
             {
                 var start = args.TryGetValue("start", out var s) ? double.Parse(s, CultureInfo.InvariantCulture) : 0.0;
                 var step = args.TryGetValue("step", out var st) ? double.Parse(st, CultureInfo.InvariantCulture) : 15.0;
@@ -681,7 +674,7 @@ namespace AzimuthConsole.Commands
                 var stLt = args.TryGetValue("lt", out var lt) ? double.Parse(lt, CultureInfo.InvariantCulture) : double.NaN;
                 var stLn = args.TryGetValue("ln", out var ln) ? double.Parse(ln, CultureInfo.InvariantCulture) : double.NaN;
                 runtime.StartCalibration(start, step, n, stLt, stLn);
-                return CommandResult.Ok();
+                return Task.FromResult(CommandResult.Ok());
             });
 
             router.Register(new CommandMeta
@@ -692,10 +685,10 @@ namespace AzimuthConsole.Commands
                 Parameters = "-",
                 Response = "FCAL,OK",
                 Description = "Stop/abort antenna calibration"
-            }, async (args, ctx) =>
+            }, (args, ctx) =>
             {
                 runtime.StopCalibration();
-                return CommandResult.Ok();
+                return Task.FromResult(CommandResult.Ok());
             });
 
             router.Register(new CommandMeta
@@ -706,10 +699,8 @@ namespace AzimuthConsole.Commands
                 Parameters = "-",
                 Response = "CAL?,OK,state=...,points=N,total=N,angle=N,acal_state=...,acal_collected=N,acal_total=N[,acal_phi=N]",
                 Description = "Get calibration status (rotator + angular)"
-            }, async (args, ctx) =>
-            {
-                return CommandResult.Ok(runtime.GetCalibrationStatus());
-            });
+            }, (args, ctx) =>
+            Task.FromResult(CommandResult.Ok(runtime.GetCalibrationStatus())));
 
             router.Register(new CommandMeta
             {
@@ -719,7 +710,7 @@ namespace AzimuthConsole.Commands
                 Parameters = "start=N,end=N,step=N,n=N,addr=N",
                 Response = "ACAL,OK",
                 Description = "Start angular calibration (compass/antenna zero alignment)"
-            }, async (args, ctx) =>
+            }, (args, ctx) =>
             {
                 var st = double.Parse(args["start"], CultureInfo.InvariantCulture);
                 var nd = double.Parse(args["end"], CultureInfo.InvariantCulture);
@@ -727,7 +718,7 @@ namespace AzimuthConsole.Commands
                 var n = int.Parse(args["n"]);
                 var addr = int.Parse(args["addr"]);
                 runtime.StartAngularCalibration(st, nd, step, n, addr);
-                return CommandResult.Ok();
+                return Task.FromResult(CommandResult.Ok());
             });
         }
 
@@ -741,10 +732,8 @@ namespace AzimuthConsole.Commands
                 Parameters = "-",
                 Response = "OFMT?,OK,format=...",
                 Description = "Get output messages format description"
-            }, async (args, ctx) =>
-            {
-                return CommandResult.Ok("format", runtime.GetOutputFormat());
-            });
+            }, (args, ctx) =>
+            Task.FromResult(CommandResult.Ok("format", runtime.GetOutputFormat())));
 
             router.Register(new CommandMeta
             {
@@ -754,20 +743,20 @@ namespace AzimuthConsole.Commands
                 Parameters = "on=TRUE|FALSE,mode=H|NE",
                 Response = "PSIMSSB,OK,on=...,mode=...",
                 Description = "Enable/disable PSIMSSB output. mode=H (Head-Up, relative), mode=NE (UTM Northing/Easting)"
-            }, async (args, ctx) =>
+            }, (args, ctx) =>
             {
                 var on = args.TryGetValue("on", out var onStr) ? onStr.ToUpper() == "TRUE" : false;
                 var mode = args.TryGetValue("mode", out var modeStr) ? modeStr.ToUpper() : "H";
 
                 if (mode != "H" && mode != "NE")
-                    return CommandResult.Error("mode must be H or NE");
+                    return Task.FromResult(CommandResult.Error("mode must be H or NE"));
 
                 runtime.SetPSIMSSBOutput(on, mode);
-                return CommandResult.Ok(new Dictionary<string, string>
+                return Task.FromResult(CommandResult.Ok(new Dictionary<string, string>
                 {
                     ["on"] = on ? "TRUE" : "FALSE",
                     ["mode"] = mode
-                });
+                }));
             });
         }
 
@@ -781,15 +770,15 @@ namespace AzimuthConsole.Commands
                 Parameters = "on=TRUE/FALSE",
                 Response = "WEBLOG,OK",
                 Description = "Toggle web command logging to file (default OFF)"
-            }, async (args, ctx) =>
+            }, (args, ctx) =>
             {
                 if (args.TryGetValue("on", out var val))
                 {
                     var enable = val.ToUpper() == "TRUE" || val == "1" || val.ToUpper() == "ON";
                     runtime.SetWebLogging(enable);
-                    return CommandResult.Ok("on", enable ? "TRUE" : "FALSE");
+                    return Task.FromResult(CommandResult.Ok("on", enable ? "TRUE" : "FALSE"));
                 }
-                return CommandResult.Ok("on", runtime.GetWebLogging() ? "TRUE" : "FALSE");
+                return Task.FromResult(CommandResult.Ok("on", runtime.GetWebLogging() ? "TRUE" : "FALSE"));
             });
 
             router.Register(new CommandMeta
@@ -800,10 +789,10 @@ namespace AzimuthConsole.Commands
                 Parameters = "-",
                 Response = "DELGS,OK",
                 Description = "Delete all old log files (current log preserved)"
-            }, async (args, ctx) =>
+            }, (args, ctx) =>
             {
                 var result = runtime.CleanOldLogs();
-                return result ? CommandResult.Ok() : CommandResult.Error("failed to clean logs");
+                return Task.FromResult(result ? CommandResult.Ok() : CommandResult.Error("failed to clean logs"));
             });
         }
 
@@ -817,11 +806,11 @@ namespace AzimuthConsole.Commands
                 Parameters = "cmd=?",
                 Response = "HELP,OK,commands=...",
                 Description = "Show help for all commands or specific command"
-            }, async (args, ctx) =>
+            }, (args, ctx) =>
             {
-                var cmd = args.GetValueOrDefault("cmd", null);
+                var cmd = args.TryGetValue("cmd", out var c) ? c : null;
                 var help = router.GetHelp(cmd);
-                return CommandResult.Ok("commands", help);
+                return Task.FromResult(CommandResult.Ok("commands", help));
             });
 
             router.Register(new CommandMeta
@@ -832,14 +821,14 @@ namespace AzimuthConsole.Commands
                 Parameters = "-",
                 Response = "HKEYS,OK,hotkeys=...",
                 Description = "Show hotkeys hint"
-            }, async (args, ctx) =>
+            }, (args, ctx) =>
             {
                 var keys = "F1 - Help\nF12 - Switch log mode (Normal/Errors/Silent)\n" +
                            "Ctrl+L - Clear screen\nCtrl+N - Open connection (OCON)\n" +
                            "Ctrl+Shift+N - Close connection (CCON)\n" +
                            "Ctrl+I - Resume interrogation (RITG)\n" +
                            "Ctrl+Shift+I - Pause interrogation (PITG)\nCtrl+E - Exit";
-                return CommandResult.Ok("hotkeys", keys);
+                return Task.FromResult(CommandResult.Ok("hotkeys", keys));
             });
 
             router.Register(new CommandMeta
@@ -850,10 +839,10 @@ namespace AzimuthConsole.Commands
                 Parameters = "-",
                 Response = "EXIT,OK",
                 Description = "Terminate application"
-            }, async (args, ctx) =>
+            }, (args, ctx) =>
             {
                 runtime.RequestShutdown();
-                return CommandResult.Ok();
+                return Task.FromResult(CommandResult.Ok());
             });
 
             router.Register(new CommandMeta
@@ -864,9 +853,9 @@ namespace AzimuthConsole.Commands
                 Parameters = "-",
                 Response = "VER,OK,version=...",
                 Description = "Show version info"
-            }, async (args, ctx) =>
+            }, (args, ctx) =>
             {
-                return CommandResult.Ok("version", AppUtils.GetFullVersionInfo());
+                return Task.FromResult(CommandResult.Ok("version", AppUtils.GetFullVersionInfo()));
             });
 
             router.Register(new CommandMeta
@@ -877,11 +866,9 @@ namespace AzimuthConsole.Commands
                 Parameters = "-",
                 Response = "STAT,OK,azm_status=...,interrogation=...,...",
                 Description = "Show system status summary"
-            }, async (args, ctx) =>
-            {
-                return CommandResult.Ok(runtime.GetSystemState());
-            });
-            
+            }, (args, ctx) =>
+            Task.FromResult(CommandResult.Ok(runtime.GetSystemState())));
+
             router.Register(new CommandMeta
             {
                 Id = "EXPCR",
@@ -890,14 +877,14 @@ namespace AzimuthConsole.Commands
                 Parameters = "file=path",
                 Response = "EXPCR,OK",
                 Description = "Export command reference to Markdown file"
-            }, async (args, ctx) =>
+            }, (args, ctx) =>
             {
                 if (args.TryGetValue("file", out var file))
                 {
                     var result = runtime.ExportCommandReference(file);
-                    return result ? CommandResult.Ok() : CommandResult.Error("failed to write file");
+                    return Task.FromResult(result ? CommandResult.Ok() : CommandResult.Error("failed to write file"));
                 }
-                return CommandResult.Error("usage: EXPCC,file=path.md");
+                return Task.FromResult(CommandResult.Error("usage: EXPCR,file=path.md"));
             });
 
             router.Register(new CommandMeta
@@ -908,16 +895,16 @@ namespace AzimuthConsole.Commands
                 Parameters = "speed=0|1,file=path",
                 Response = "PLAY,OK",
                 Description = "Playback log file (0=instant, 1=realtime (default), no params=stop)"
-            }, async (args, ctx) =>
+            }, (args, ctx) =>
             {
                 if (args.TryGetValue("file", out var file))
-                {                    
+                {
                     var isInstant = args.TryGetValue("speed", out var speed) && speed == "0";
                     var result = runtime.StartLogPlayback(isInstant, file);
-                    return result ? CommandResult.Ok() : CommandResult.Error("log player not available");
+                    return Task.FromResult(result ? CommandResult.Ok() : CommandResult.Error("log player not available"));
                 }
                 var stopped = runtime.StopLogPlayback();
-                return stopped ? CommandResult.Ok() : CommandResult.Error("not playing");
+                return Task.FromResult(stopped ? CommandResult.Ok() : CommandResult.Error("not playing"));
             });
 
             router.Register(new CommandMeta
@@ -980,14 +967,14 @@ namespace AzimuthConsole.Commands
                 Parameters = "file=path",
                 Response = "SAVE,OK",
                 Description = "Save current settings as init script"
-            }, async (args, ctx) =>
+            }, (args, ctx) =>
             {
                 if (args.TryGetValue("file", out var file))
                 {
                     var result = runtime.SaveSettings(file);
-                    return result ? CommandResult.Ok() : CommandResult.Error("failed to save");
+                    return Task.FromResult(result ? CommandResult.Ok() : CommandResult.Error("failed to save"));
                 }
-                return CommandResult.Error("usage: SAVE,file=settings.cmd");
+                return Task.FromResult(CommandResult.Error("usage: SAVE,file=settings.cmd"));
             });
 
             router.Register(new CommandMeta
@@ -998,11 +985,11 @@ namespace AzimuthConsole.Commands
                 Parameters = "-",
                 Response = "SAVEINIT,OK",
                 Description = "Save current settings as default init script (init.cmd)"
-            }, async (args, ctx) =>
+            }, (args, ctx) =>
             {
                 var initFile = Path.Combine(AppContext.BaseDirectory, "init.cmd");
                 var result = runtime.SaveSettings(initFile);
-                return result ? CommandResult.Ok() : CommandResult.Error("failed to save init.cmd");
+                return Task.FromResult(result ? CommandResult.Ok() : CommandResult.Error("failed to save init.cmd"));
             });
 
             router.Register(new CommandMeta
@@ -1013,20 +1000,20 @@ namespace AzimuthConsole.Commands
                 Parameters = "-",
                 Response = "RESETINIT,OK",
                 Description = "Remove default init script, revert to factory defaults on next start"
-            }, async (args, ctx) =>
+            }, (args, ctx) =>
             {
                 var initFile = Path.Combine(AppContext.BaseDirectory, "init.cmd");
                 try
                 {
                     if (File.Exists(initFile))
                     {
-                        File.Delete(initFile);                        
+                        File.Delete(initFile);
                     }
-                    return CommandResult.Ok();
+                    return Task.FromResult(CommandResult.Ok());
                 }
                 catch (Exception ex)
                 {
-                    return CommandResult.Error($"failed to remove init.cmd: {ex.Message}");
+                    return Task.FromResult(CommandResult.Error($"failed to remove init.cmd: {ex.Message}"));
                 }
             });
         }
@@ -1069,10 +1056,8 @@ namespace AzimuthConsole.Commands
                 Parameters = "-",
                 Response = "CNA?,OK,active=TRUE/FALSE",
                 Description = "Check connection status"
-            }, async (args, ctx) =>
-            {
-                return CommandResult.Ok("active", runtime.AzmStatus != "Inactive" ? "TRUE" : "FALSE");
-            });
+            }, (args, ctx) =>
+            Task.FromResult(CommandResult.Ok("active", runtime.AzmStatus != "Inactive" ? "TRUE" : "FALSE")));
 
             router.Register(new CommandMeta
             {
@@ -1082,11 +1067,11 @@ namespace AzimuthConsole.Commands
                 Parameters = "id=AZM/AUX1/AUX2/RDT",
                 Response = "DET?,OK,detected=TRUE/FALSE",
                 Description = "Check device detection status"
-            }, async (args, ctx) =>
+            }, (args, ctx) =>
             {
                 if (args.TryGetValue("id", out var id))
-                    return CommandResult.Ok("detected", runtime.IsDeviceDetected(id) ? "TRUE" : "FALSE");
-                return CommandResult.Error("usage: DET?,id=AZM|AUX1|AUX2|RDT");
+                    return Task.FromResult(CommandResult.Ok("detected", runtime.IsDeviceDetected(id) ? "TRUE" : "FALSE"));
+                return Task.FromResult(CommandResult.Error("usage: DET?,id=AZM|AUX1|AUX2|RDT"));
             });
         }
     }
