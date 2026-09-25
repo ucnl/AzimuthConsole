@@ -33,6 +33,15 @@ function parseAZMREM(line) {
         };
     };
 
+    const readStringWithAge = () => {
+        const v = parts[idx++];
+        const a = parts[idx++];
+        return {
+            value: (v !== undefined && v !== '') ? v : null,
+            age: (a !== undefined && a !== '') ? parseFloat(a) : null
+        };
+    };
+
     const b = { address: addr };
 
     b.sRange = readIgnoreAge();
@@ -63,14 +72,17 @@ function parseAZMREM(line) {
     const wt = readWithAge();
     b.waterTemp = wt.value; b.wtAge = wt.age;
 
-    b.lat = readIgnoreAge();
-    b.lon = readIgnoreAge();
+    b.lat = readIgnoreAge();       // Lat
+    b.lon = readIgnoreAge();       // Lon
+    const llAge = parts[idx++];    // ПРОПУЩЕНО БЫЛО! Общий age для Lat+Lon
+    b.latLonAge = (llAge !== undefined && llAge !== '') ? parseFloat(llAge) : null;
 
-    const ra = readWithAge();
-    b.rAzimuth = ra.value; b.raAge = ra.age;
+    const ra = readWithAge();      
+    b.rAzimuth = ra.value;
+    b.raAge = ra.age;
 
-    const msg = readWithAge();
-    b.message = msg.value !== null ? String(msg.value) : null;
+    const msg = readStringWithAge();  
+    b.message = msg.value;
     b.msgAge = msg.age;
 
     b.x = readIgnoreAge();
@@ -78,6 +90,12 @@ function parseAZMREM(line) {
     b.z = readIgnoreAge();
 
     b.isTimeout = (parts[idx] || '').toLowerCase() === 'true';
+
+
+
+
+
+
 
     const ages = [b.msrAge, b.depthAge, b.srpAge, b.adAge, b.aaAge,
     b.elAge, b.vccAge, b.wtAge, b.raAge, b.msgAge]
@@ -201,7 +219,6 @@ let portStatuses = {
 window.i18n = i18n;
 
 document.addEventListener('DOMContentLoaded', function () {
-    console.log('DOM loaded');
     init();
 });
 
@@ -487,7 +504,6 @@ function connectWebSocket() {
                 try {
                     const schemaJson = msg.substring(8);
                     commandSchema = JSON.parse(schemaJson);
-                    console.log('[WS] Command schema loaded:', commandSchema.commands.length, 'commands');
                 } catch (e) {
                     console.error('[WS] Failed to parse schema:', e);
                 }
@@ -596,7 +612,6 @@ function handleCommandResponse(line) {
             const verPart = parts.find(p => p.startsWith('version='));
             if (verPart) {
                 appVersion = verPart.split('=')[1];
-                console.log('[VER] Получена версия:', appVersion);
                 updateFooterVersion();
             }
             return;
@@ -1599,40 +1614,67 @@ function updateSystemInfo() {
     html += `</div>`;
 
     if (localDevice) {
-        function addRow(label, value, unit = '', color = '#fff') {
+        // Локальная функция для строки "label: value"
+        function addRow(label, value, unit = '', color = '#fff', precision = 1) {
             if (value !== undefined && value !== null && !isNaN(value)) {
+                const display = (typeof value === 'number') ? value.toFixed(precision) : value;
                 return `<div class="sys-detail" style="display: flex; justify-content: space-between;">
                     <span style="color: #aaa;">${label}:</span>
-                    <span style="color: ${color};">${value.toFixed ? value.toFixed(1) : value}${unit}</span>
+                    <span style="color: ${color};">${display}${unit}</span>
                 </div>`;
             }
             return '';
         }
 
-        // Позиция (LBL)
-        if (localDevice.x !== undefined || localDevice.y !== undefined) {
+        // === ПОЗИЦИЯ (географические координаты) ===
+        const hasLatLon =
+            localDevice.lat !== undefined && localDevice.lat !== null && !isNaN(localDevice.lat) &&
+            localDevice.lon !== undefined && localDevice.lon !== null && !isNaN(localDevice.lon);
+
+        // === ПОЗИЦИЯ (декартовы X/Y/Z) ===
+        const hasXY =
+            (localDevice.x !== undefined && localDevice.x !== null && !isNaN(localDevice.x)) ||
+            (localDevice.y !== undefined && localDevice.y !== null && !isNaN(localDevice.y));
+
+        const hasZ = localDevice.z !== undefined && localDevice.z !== null && !isNaN(localDevice.z);
+
+        if (hasLatLon || hasXY || hasZ) {
             html += `<div class="sys-section" style="margin-top: 6px; color: #4a90e2; font-weight: bold; font-size: 9px;">${i18n.t('position')}</div>`;
-            html += addRow('X', localDevice.x, 'm');
-            html += addRow('Y', localDevice.y, 'm');
-            html += addRow('Z', localDevice.z, 'm');
+
+            // Географические — 6 знаков после запятой
+            if (hasLatLon) {
+                html += addRow(i18n.t('lat'), localDevice.lat, '°', '#4ec9b0', 6);
+                html += addRow(i18n.t('lon'), localDevice.lon, '°', '#4ec9b0', 6);
+            }
+
+            // Декартовы — 2 знака
+            if (localDevice.x !== undefined && localDevice.x !== null && !isNaN(localDevice.x)) {
+                html += addRow('X', localDevice.x, 'm', '#fff', 2);
+            }
+            if (localDevice.y !== undefined && localDevice.y !== null && !isNaN(localDevice.y)) {
+                html += addRow('Y', localDevice.y, 'm', '#fff', 2);
+            }
+            if (hasZ) {
+                html += addRow('Z', localDevice.z, 'm', '#fff', 2);
+            }
         }
 
-        // Ориентация
+        // === ОРИЕНТАЦИЯ ===
         if (localDevice.heading !== undefined || localDevice.course !== undefined) {
             html += `<div class="sys-section" style="margin-top: 6px; color: #4a90e2; font-weight: bold; font-size: 9px;">${i18n.t('orientation')}</div>`;
-            html += addRow(i18n.t('heading'), localDevice.heading, '°', '#ff4444');
-            html += addRow(i18n.t('course'), localDevice.course, '°', '#44ff44');
-            html += addRow(i18n.t('speed'), localDevice.speed, 'm/s');
-            html += addRow(i18n.t('pitch'), localDevice.pitch, '°', '#aaa');
-            html += addRow(i18n.t('roll'), localDevice.roll, '°', '#aaa');
+            html += addRow(i18n.t('heading'), localDevice.heading, '°', '#ff4444', 1);
+            html += addRow(i18n.t('course'), localDevice.course, '°', '#44ff44', 1);
+            html += addRow(i18n.t('speed'), localDevice.speed, 'm/s', '#fff', 2);
+            html += addRow(i18n.t('pitch'), localDevice.pitch, '°', '#aaa', 1);
+            html += addRow(i18n.t('roll'), localDevice.roll, '°', '#aaa', 1);
         }
 
-        // Среда (всегда, если есть данные)
+        // === СРЕДА ===
         if (localDevice.temperature !== undefined || localDevice.pressure !== undefined || localDevice.depth !== undefined) {
             html += `<div class="sys-section" style="margin-top: 6px; color: #4a90e2; font-weight: bold; font-size: 9px;">${i18n.t('environment')}</div>`;
-            html += addRow(i18n.t('temperature'), localDevice.temperature, '°C', '#ffa500');
-            html += addRow(i18n.t('pressure'), localDevice.pressure, 'mBar', '#aaa');
-            html += addRow(i18n.t('depth'), localDevice.depth, 'm', '#4a90e2');
+            html += addRow(i18n.t('temperature'), localDevice.temperature, '°C', '#ffa500', 1);
+            html += addRow(i18n.t('pressure'), localDevice.pressure, 'mBar', '#aaa', 1);
+            html += addRow(i18n.t('depth'), localDevice.depth, 'm', '#4a90e2', 2);
         }
     }
 
@@ -2392,8 +2434,6 @@ function initCommandAutocomplete() {
             removeCommandDropdown();
         }
     });
-
-    console.log('[Autocomplete] Initialized');
 }
 
 // === История ===
@@ -2695,18 +2735,15 @@ function fetchVersion() {
     if (versionFetched) return;
 
     if (!ws || ws.readyState === WebSocket.CONNECTING) {
-        console.log('[VER] WS в состоянии CONNECTING, ждём...');
         setTimeout(fetchVersion, 500);
         return;
     }
 
     if (ws.readyState !== WebSocket.OPEN) {
-        console.log('[VER] WS не открыт (state=' + ws.readyState + ')');
         return;
     }
 
     versionFetched = true;
-    console.log('[VER] Отправляем VER');
     ws.send('VER');
     addLogEntry('>> VER');
 }

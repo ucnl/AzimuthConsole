@@ -21,6 +21,12 @@ if (!(Test-Path $archivesPath)) {
     New-Item -ItemType Directory -Path $archivesPath -Force | Out-Null
 }
 
+# Очищаем старые архивы
+Write-Host "Cleaning old archives..." -ForegroundColor Yellow
+Get-ChildItem -Path $archivesPath -Filter "*.zip" -ErrorAction SilentlyContinue | Remove-Item -Force
+Write-Host "Old archives removed" -ForegroundColor Gray
+Write-Host ""
+
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "  Publishing and Archiving AzimuthConsole" -ForegroundColor Cyan
 Write-Host "  Started at: $(Get-Date -Format 'HH:mm:ss')" -ForegroundColor Gray
@@ -42,6 +48,18 @@ foreach ($platform in $platforms) {
     
     Write-Host "[$current/$total] Processing $rid..." -ForegroundColor Yellow
     
+    # 0. Очищаем старые файлы в outputPath
+    if (Test-Path $outputPath) {
+        Write-Host "  Cleaning old files..."
+        Remove-Item -Path "$outputPath\*" -Recurse -Force
+    }
+    
+    # 0.5. Удаляем старый архив если есть
+    if (Test-Path $archivePath) {
+        Write-Host "  Removing old archive: $archiveName"
+        Remove-Item -Path $archivePath -Force
+    }
+    
     # 1. Публикация
     Write-Host "  Publishing..."
     dotnet publish -c Release -r $rid --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=false -o $outputPath
@@ -52,12 +70,11 @@ foreach ($platform in $platforms) {
     }
     
     # 2. Удаляем .pdb файлы (если есть)
-    Get-ChildItem -Path $outputPath -Filter "*.pdb" | Remove-Item -Force
+    Get-ChildItem -Path $outputPath -Filter "*.pdb" -ErrorAction SilentlyContinue | Remove-Item -Force
     
     # 3. Переименовываем исполняемый файл (добавляем версию)
     $exeFile = Get-ChildItem -Path $outputPath -Filter "${projectName}*${ext}" | Select-Object -First 1
     if ($exeFile) {
-        # Получаем версию из файла
         $version = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($exeFile.FullName).FileVersion
         if ($version) {
             $newName = "${projectName}_v${version}_${name}${ext}"
@@ -86,7 +103,6 @@ Write-Host "  Archives location: $archivesPath" -ForegroundColor Gray
 Write-Host "  Finished at: $(Get-Date -Format 'HH:mm:ss')" -ForegroundColor Gray
 Write-Host "========================================" -ForegroundColor Cyan
 
-# Показываем список созданных архивов
 Write-Host ""
 Write-Host "Created archives:" -ForegroundColor Yellow
 Get-ChildItem -Path $archivesPath -Filter "*.zip" | ForEach-Object {

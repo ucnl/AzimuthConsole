@@ -14,6 +14,7 @@ namespace AzimuthConsole.Commands
             RegisterTransceiverCommands(router, runtime);
             RegisterPositionCommands(router, runtime);
             RegisterBeaconCommands(router, runtime);
+            RegisterBeaconReferencedCommands(router, runtime);
             RegisterCalibrationCommands(router, runtime);
             RegisterOutputCommands(router, runtime);
             RegisterLogCommands(router, runtime);
@@ -413,6 +414,255 @@ namespace AzimuthConsole.Commands
             });
         }
 
+        private static void RegisterBeaconReferencedCommands(CommandRouter router, ApplicationRuntime runtime)
+        {
+            // =====================================================
+            // AMODE — режим антенны
+            // =====================================================
+            router.Register(new CommandMeta
+            {
+                Id = "AMODE",
+                Category = "BeaconReferenced",
+                Sources = "T,R,W",
+                Parameters = "mode=geographic|cartesian_fixed|beacon_referenced",
+                Response = "AMODE,OK,mode=...",
+                Description = "Get/set antenna mode"
+            }, async (args, ctx) =>
+            {
+                if (args.TryGetValue("mode", out var modeStr))
+                {
+                    AZM_ANTENNA_MODE_Enum mode;
+                    switch (modeStr.ToLower())
+                    {
+                        case "geographic":
+                            mode = AZM_ANTENNA_MODE_Enum.AM_GEOGRAPHIC;
+                            break;
+                        case "cartesian_fixed":
+                            mode = AZM_ANTENNA_MODE_Enum.AM_CARTESIAN_FIXED;
+                            break;
+                        case "beacon_referenced":
+                            mode = AZM_ANTENNA_MODE_Enum.AM_BEACON_REFERENCED;
+                            break;
+                        default:
+                            return CommandResult.Error($"mode: unknown value '{modeStr}'");
+                    }
+
+                    runtime.SetAntennaMode(mode);
+                    return CommandResult.Ok("mode", modeStr.ToLower());
+                }
+
+                // GET
+                string currentMode = runtime.AntennaMode switch
+                {
+                    AZM_ANTENNA_MODE_Enum.AM_GEOGRAPHIC => "geographic",
+                    AZM_ANTENNA_MODE_Enum.AM_CARTESIAN_FIXED => "cartesian_fixed",
+                    AZM_ANTENNA_MODE_Enum.AM_BEACON_REFERENCED => "beacon_referenced",
+                    _ => "invalid"
+                };
+                return CommandResult.Ok("mode", currentMode);
+            });
+
+            // =====================================================
+            // RBADD — добавить/обновить опорный маяк
+            // =====================================================
+            router.Register(new CommandMeta
+            {
+                Id = "RBADD",
+                Category = "BeaconReferenced",
+                Sources = "T,R,W",
+                Parameters = "addr=N,lat=N,lon=N,[depth=N]",
+                Response = "RBADD,OK",
+                Description = "Add/update reference beacon (addr=1-16, lat/lon in degrees)"
+            }, async (args, ctx) =>
+            {
+                if (!args.TryGetValue("addr", out var addrStr) ||
+                    !args.TryGetValue("lat", out var latStr) ||
+                    !args.TryGetValue("lon", out var lonStr))
+                {
+                    return CommandResult.Error("usage: RBADD,addr=N,lat=N,lon=N,[depth=N]");
+                }
+
+                if (!int.TryParse(addrStr, out var addr) || addr < 1 || addr > 16)
+                    return CommandResult.Error("addr: must be integer 1..16");
+
+                if (!double.TryParse(latStr, NumberStyles.Float, CultureInfo.InvariantCulture, out var lat)
+                    || !AZM.IsLatDeg(lat))
+                    return CommandResult.Error("lat: out of range (-90..90)");
+
+                if (!double.TryParse(lonStr, NumberStyles.Float, CultureInfo.InvariantCulture, out var lon)
+                    || !AZM.IsLonDeg(lon))
+                    return CommandResult.Error("lon: out of range (-180..180)");
+
+                double depth = 0.0;
+                if (args.TryGetValue("depth", out var depthStr))
+                {
+                    if (!double.TryParse(depthStr, NumberStyles.Float, CultureInfo.InvariantCulture, out depth))
+                        return CommandResult.Error("depth: invalid number");
+                }
+
+                bool ok = runtime.AddReferenceBeacon(addr, lat, lon, depth);
+                return ok
+                    ? CommandResult.Ok()
+                    : CommandResult.Error("failed to add reference beacon");
+            });
+
+            // =====================================================
+            // RBDEL — удалить опорный маяк
+            // =====================================================
+            router.Register(new CommandMeta
+            {
+                Id = "RBDEL",
+                Category = "BeaconReferenced",
+                Sources = "T,R,W",
+                Parameters = "addr=N",
+                Response = "RBDEL,OK",
+                Description = "Remove reference beacon by address (1-16)"
+            }, async (args, ctx) =>
+            {
+                if (!args.TryGetValue("addr", out var addrStr))
+                    return CommandResult.Error("usage: RBDEL,addr=N");
+
+                if (!int.TryParse(addrStr, out var addr) || addr < 1 || addr > 16)
+                    return CommandResult.Error("addr: must be integer 1..16");
+
+                bool ok = runtime.RemoveReferenceBeacon(addr);
+                return ok
+                    ? CommandResult.Ok()
+                    : CommandResult.Error("reference beacon not found");
+            });
+
+            // =====================================================
+            // RBLST — список опорных маяков
+            // =====================================================
+            router.Register(new CommandMeta
+            {
+                Id = "RBLST",
+                Category = "BeaconReferenced",
+                Sources = "T,R,W",
+                Parameters = "-",
+                Response = "RBLST,OK,count=N,beacons=addr:lat:lon:depth;...",
+                Description = "List reference beacons"
+            }, async (args, ctx) =>
+            {
+                var list = runtime.GetReferenceBeaconsList();
+
+                var beaconsStr = list.Count == 0
+                    ? ""
+                    : string.Join(";", list.Select(b =>
+                        string.Format(CultureInfo.InvariantCulture,
+                            "{0}:{1:F6}:{2:F6}:{3:F1}",
+                            (int)b.Address + 1, b.Lat_deg, b.Lon_deg, b.Depth_m)));
+
+                return CommandResult.Ok(new Dictionary<string, string>
+                {
+                    ["count"] = list.Count.ToString(),
+                    ["beacons"] = beaconsStr
+                });
+            });
+
+            // =====================================================
+            // RBCLR — очистить все опорные маяки
+            // =====================================================
+            router.Register(new CommandMeta
+            {
+                Id = "RBCLR",
+                Category = "BeaconReferenced",
+                Sources = "T,R,W",
+                Parameters = "-",
+                Response = "RBCLR,OK",
+                Description = "Clear all reference beacons"
+            }, async (args, ctx) =>
+            {
+                runtime.ClearReferenceBeacons();
+                return CommandResult.Ok();
+            });
+
+            // =====================================================
+            // SHPZ — параметры DH-фильтра судна и буфера
+            // =====================================================
+            router.Register(new CommandMeta
+            {
+                Id = "SHPZ",
+                Category = "BeaconReferenced",
+                Sources = "T,R,W",
+                Parameters = "maxspeed=N[,threshold=N][,fifo=N][,maxage=N][,maxspread=N]",
+                Response = "SHPZ,OK,maxspeed=...,threshold=...,fifo=...,maxage=...,maxspread=...",
+                Description = "Get/set ship DH-filter and position buffer parameters (beacon_referenced mode)"
+            }, async (args, ctx) =>
+            {
+                // GET (no args) — вернуть все параметры
+                if (args.Count == 0)
+                    return CommandResult.Ok(runtime.GetShipFilterSettings());
+
+                // SET — maxspeed обязателен
+                if (!args.TryGetValue("maxspeed", out var maxSpeedStr))
+                    return CommandResult.Error("maxspeed is required");
+
+                if (!double.TryParse(maxSpeedStr, NumberStyles.Float, CultureInfo.InvariantCulture, out var maxSpeed))
+                    return CommandResult.Error("maxspeed: invalid number");
+
+                if (!AZM.IsMaxShipSpeed(maxSpeed))
+                    return CommandResult.Error("maxspeed: out of range (0.5..50)");
+
+                // Опциональные параметры
+                double? threshold = null;
+                int? fifo = null;
+                double? maxAge = null;
+                double? maxSpread = null;
+
+                if (args.TryGetValue("threshold", out var thresholdStr))
+                {
+                    if (!double.TryParse(thresholdStr, NumberStyles.Float, CultureInfo.InvariantCulture, out var t))
+                        return CommandResult.Error("threshold: invalid number");
+                    if (!AZM.IsDhThreshold(t))
+                        return CommandResult.Error("threshold: out of range (0.5..500)");
+                    threshold = t;
+                }
+
+                if (args.TryGetValue("fifo", out var fifoStr))
+                {
+                    if (!int.TryParse(fifoStr, out var f))
+                        return CommandResult.Error("fifo: invalid integer");
+                    if (!AZM.IsDhFifoSize(f))
+                        return CommandResult.Error("fifo: out of range (2..32)");
+                    fifo = f;
+                }
+
+                if (args.TryGetValue("maxage", out var maxAgeStr))
+                {
+                    if (!double.TryParse(maxAgeStr, NumberStyles.Float, CultureInfo.InvariantCulture, out var ma))
+                        return CommandResult.Error("maxage: invalid number");
+                    if (!AZM.IsRefShipMaxAge(ma))
+                        return CommandResult.Error("maxage: out of range (1000..600000)");
+                    maxAge = ma;
+                }
+
+                if (args.TryGetValue("maxspread", out var maxSpreadStr))
+                {
+                    if (!double.TryParse(maxSpreadStr, NumberStyles.Float, CultureInfo.InvariantCulture, out var ms))
+                        return CommandResult.Error("maxspread: invalid number");
+                    if (!AZM.IsRefMaxSpread(ms))
+                        return CommandResult.Error("maxspread: out of range (1..5000)");
+                    maxSpread = ms;
+                }
+
+                try
+                {
+                    runtime.SetShipFilterSettings(maxSpeed, threshold, fifo, maxAge, maxSpread);
+                    return CommandResult.Ok(runtime.GetShipFilterSettings());
+                }
+                catch (ArgumentOutOfRangeException ex)
+                {
+                    return CommandResult.Error(ex.Message);
+                }
+            });
+        }
+
+
+
+
+
+
         private static void RegisterCalibrationCommands(CommandRouter router, ApplicationRuntime runtime)
         {
             router.Register(new CommandMeta
@@ -657,12 +907,12 @@ namespace AzimuthConsole.Commands
                 Sources = "T,R,W",
                 Parameters = "speed=0|1,file=path",
                 Response = "PLAY,OK",
-                Description = "Playback log file (0=instant, 1=realtime, no params=stop)"
+                Description = "Playback log file (0=instant, 1=realtime (default), no params=stop)"
             }, async (args, ctx) =>
             {
                 if (args.TryGetValue("file", out var file))
-                {
-                    var isInstant = !args.TryGetValue("speed", out var speed) || speed == "0";
+                {                    
+                    var isInstant = args.TryGetValue("speed", out var speed) && speed == "0";
                     var result = runtime.StartLogPlayback(isInstant, file);
                     return result ? CommandResult.Ok() : CommandResult.Error("log player not available");
                 }

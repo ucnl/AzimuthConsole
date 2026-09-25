@@ -15,7 +15,6 @@ const CommandAutocomplete = {
             this.schema = typeof schemaJson === 'string'
                 ? JSON.parse(schemaJson)
                 : schemaJson;
-            console.log(`[Autocomplete] Loaded ${this.schema.commands.length} commands`);
         } catch (e) {
             console.error('[Autocomplete] Failed to parse schema:', e);
         }
@@ -407,7 +406,5 @@ const CommandAutocomplete = {
                 this.removeDropdown();
             }
         });
-
-        console.log('[Autocomplete] Initialized');
     }
 };

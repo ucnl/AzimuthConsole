@@ -575,6 +575,110 @@ namespace AzimuthConsole
             }
         }
 
+
+
+        #region Beacon-referenced mode
+
+        public AZM_ANTENNA_MODE_Enum AntennaMode =>
+            _azmManager?.AntennaMode ?? AZM_ANTENNA_MODE_Enum.AM_GEOGRAPHIC;
+
+        public int ReferenceBeaconsCount => _azmManager?.ReferenceBeaconsCount ?? 0;
+
+        public ShipPosition? ShipPosition => _azmManager?.ShipPosition;
+
+        public double ShipDHMaxSpeed_mps => _azmManager?.ShipDHMaxSpeed_mps ?? 2.0;
+        public double ShipDHThreshold_m => _azmManager?.ShipDHThreshold_m ?? 8.0;
+        public int ShipDHFifoSize => _azmManager?.ShipDHFifoSize ?? 8;
+        public double RefShipMaxAge_ms => _azmManager?.RefShipMaxAge_ms ?? 20000;
+        public double RefMaxSpread_m => _azmManager?.RefMaxSpread_m ?? 50.0;
+
+        /// <summary>
+        /// Установить режим антенны.
+        /// </summary>
+        public void SetAntennaMode(AZM_ANTENNA_MODE_Enum mode)
+        {
+            _azmManager?.SetAntennaMode(mode);
+            _logger?.Write($"[AMODE] Antenna mode: {mode}");
+        }
+
+        /// <summary>
+        /// Добавить/обновить опорный маяк.
+        /// </summary>
+        public bool AddReferenceBeacon(int userAddr, double lat_deg, double lon_deg, double depth_m)
+        {
+            if (userAddr < 1 || userAddr > 16)
+                return false;
+
+            var addr = (REMOTE_ADDR_Enum)(userAddr - 1);
+            bool ok = _azmManager?.SetReferenceBeacon(addr, lat_deg, lon_deg, depth_m) ?? false;
+
+            if (ok)
+                _logger?.Write($"[RBADD] Reference beacon #{userAddr}: {lat_deg:F6}, {lon_deg:F6}, {depth_m:F1} m");
+
+            return ok;
+        }
+
+        /// <summary>
+        /// Удалить опорный маяк.
+        /// </summary>
+        public bool RemoveReferenceBeacon(int userAddr)
+        {
+            if (userAddr < 1 || userAddr > 16)
+                return false;
+
+            var addr = (REMOTE_ADDR_Enum)(userAddr - 1);
+            bool ok = _azmManager?.RemoveReferenceBeacon(addr) ?? false;
+
+            if (ok)
+                _logger?.Write($"[RBDEL] Reference beacon #{userAddr} removed");
+
+            return ok;
+        }
+
+        /// <summary>
+        /// Очистить все опорные маяки.
+        /// </summary>
+        public void ClearReferenceBeacons()
+        {
+            _azmManager?.ClearReferenceBeacons();
+            _logger?.Write("[RBCLR] All reference beacons cleared");
+        }
+
+        /// <summary>
+        /// Список опорных маяков.
+        /// </summary>
+        public List<ReferenceBeacon> GetReferenceBeaconsList()
+        {
+            if (_azmManager == null)
+                return new List<ReferenceBeacon>();
+
+            return _azmManager.ReferenceBeacons.ToList();
+        }
+
+        /// <summary>
+        /// Параметры DH-фильтра судна и буфера.
+        /// </summary>
+        public Dictionary<string, string> GetShipFilterSettings()
+        {
+            return _azmManager?.GetShipFilterSettings() ?? new Dictionary<string, string>();
+        }
+
+        /// <summary>
+        /// Установить параметры DH-фильтра судна и буфера (null = не менять).
+        /// </summary>
+        public void SetShipFilterSettings(double? maxSpeed_mps = null,
+            double? threshold_m = null,
+            int? fifoSize = null,
+            double? maxAge_ms = null,
+            double? maxSpread_m = null)
+        {
+            _azmManager?.SetShipFilterSettings(maxSpeed_mps, threshold_m, fifoSize, maxAge_ms, maxSpread_m);
+            _logger?.Write($"[SHPZ] Ship filter updated");
+        }
+
+        #endregion
+
+
         public void StartCalibration(double start, double step, int n, double stLatOv = double.NaN, double stLonOv = double.NaN)
         {
             if (_calibrationManager != null && _calibrationManager.State != CalibrationState.Idle)
@@ -1111,10 +1215,36 @@ namespace AzimuthConsole
                 }
                 sb.AppendLine();
 
+                // Beacon-referenced mode
+                sb.AppendLine("# Beacon-referenced mode");
+                sb.AppendLine($"AMODE,mode={AntennaModeToString(AntennaMode)}");
+
+                var shipSettings = GetShipFilterSettings();
+                if (shipSettings.Count > 0)
+                {
+                    var parts = new List<string> { "SHPZ" };
+                    parts.Add($"maxspeed={shipSettings["maxspeed"]}");
+                    if (shipSettings.ContainsKey("threshold")) parts.Add($"threshold={shipSettings["threshold"]}");
+                    if (shipSettings.ContainsKey("fifo")) parts.Add($"fifo={shipSettings["fifo"]}");
+                    if (shipSettings.ContainsKey("maxage")) parts.Add($"maxage={shipSettings["maxage"]}");
+                    if (shipSettings.ContainsKey("maxspread")) parts.Add($"maxspread={shipSettings["maxspread"]}");
+                    sb.AppendLine(string.Join(",", parts));
+                }
+
+                foreach (var refBeacon in GetReferenceBeaconsList())
+                {
+                    sb.AppendLine(string.Format(CultureInfo.InvariantCulture,
+                        "RBADD,addr={0},lat={1:F6},lon={2:F6},depth={3:F1}",
+                        (int)refBeacon.Address + 1,
+                        refBeacon.Lat_deg,
+                        refBeacon.Lon_deg,
+                        refBeacon.Depth_m));
+                }
+                sb.AppendLine();
+
                 // LBL coordinates (если заданы)
                 sb.AppendLine("# LBL (uncomment if needed)");
                 sb.AppendLine($"# SRC3,mode=1,c0=0,c1=0,c2=0,c3=0,c4=0,c5=0");
-                sb.AppendLine();
 
                 File.WriteAllText(filePath, sb.ToString());
                 _logger?.Write($"[SAVE] Settings saved to {filePath}");
@@ -1125,6 +1255,17 @@ namespace AzimuthConsole
                 _logger?.Write($"[SAVE] Error: {ex.Message}");
                 return false;
             }
+        }
+
+        private static string AntennaModeToString(AZM_ANTENNA_MODE_Enum mode)
+        {
+            return mode switch
+            {
+                AZM_ANTENNA_MODE_Enum.AM_GEOGRAPHIC => "geographic",
+                AZM_ANTENNA_MODE_Enum.AM_CARTESIAN_FIXED => "cartesian_fixed",
+                AZM_ANTENNA_MODE_Enum.AM_BEACON_REFERENCED => "beacon_referenced",
+                _ => "geographic"
+            };
         }
 
         #endregion
